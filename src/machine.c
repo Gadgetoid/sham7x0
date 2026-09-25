@@ -199,7 +199,10 @@ static uint8_t read_byte(void *userdata, uint16_t address) {
     machine_t *machine = userdata;
     if (address < 0x8000) return flash_read(machine, address);
     uint16_t page = window_page(machine, address);
-    if (page < FLASH_PAGES) return flash_read(machine, flash_address(page, address));
+    if (page < FLASH_PAGES) {
+        if (machine->trace_ports && page >= FLASH_FIRST_DATA_PAGE) machine_log(machine, "data read page %03x addr %04x pc %04x", page, address, machine->cpu.pc);
+        return flash_read(machine, flash_address(page, address));
+    }
     uint8_t *memory = page_pointer(machine, page);
     if (memory) return memory[address & (PAGE_SIZE - 1)];
     if (page == LCD_CONTROL_PAGE) return (address & 1) ? machine->lcd_control >> 8 : machine->lcd_control & 0xff;
