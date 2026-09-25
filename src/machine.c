@@ -442,7 +442,7 @@ void machine_run(machine_t *machine, uint32_t cycles) {
         if (machine->pc_histogram) machine->pc_histogram[machine->cpu.pc]++;
         if (machine->cpu.pc == machine->watch_pc && machine->watch_hits < 5000) {
             machine->watch_hits++;
-            machine_log(machine, "watch %.2fs pc %04x low page %03x high page %03x bc %02x%02x hl %02x%02x de %02x%02x sp %04x", (double)machine->cpu.cyc / MACHINE_CLOCK_HZ, machine->cpu.pc, machine->low_window_page,
+            machine_log(machine, "watch %.2fs pc %04x a %02x low page %03x high page %03x bc %02x%02x hl %02x%02x de %02x%02x sp %04x", (double)machine->cpu.cyc / MACHINE_CLOCK_HZ, machine->cpu.pc, machine->cpu.a, machine->low_window_page,
                         machine->high_window_page, machine->cpu.b, machine->cpu.c, machine->cpu.h, machine->cpu.l, machine->cpu.d, machine->cpu.e, machine->cpu.sp);
         }
         z80_step(&machine->cpu);

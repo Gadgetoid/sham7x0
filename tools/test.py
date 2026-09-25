@@ -11,6 +11,7 @@ HEADLESS = os.path.join(ROOT, "headless")
 EXPECTED = os.path.join(ROOT, "tests", "expected.txt")
 OUTPUT = os.path.join(ROOT, "build", "test")
 
+KEY_OFFSET = 0.13
 POWER = "99.0"
 ENTER = "6.6"
 ESC = "0.0"
@@ -80,7 +81,7 @@ def run_case(case, rom):
     pbm = os.path.join(OUTPUT, case["name"] + ".pbm")
     command = [HEADLESS, rom, f"--seconds={case['seconds']}", f"--pbm={pbm}"]
     if case["keys"]:
-        command.append("--keys=" + ",".join(f"{at}:{key}/{hold}" for at, key, hold in case["keys"]))
+        command.append("--keys=" + ",".join(f"{at + KEY_OFFSET if at else 0}:{key}/{hold}" for at, key, hold in case["keys"]))
     for name in case.get("install", []):
         path = os.path.join(ROOT, "apps", name + ".wzd")
         if not os.path.exists(path):

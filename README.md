@@ -56,7 +56,7 @@ From the firmware and [ozdev](https://github.com/arpruss/ozdev).
 
 | Area | Detail |
 |---|---|
-| CPU | Z80, IM 1, 6 MHz assumed |
+| CPU | Z80, IM 1, 9.8304 MHz (per MAME) |
 | 0000-7FFF | flash offset 0 |
 | 8000-9FFF | 8KB page from ports 1/2, physical page = value + 4 |
 | A000-BFFF | 8KB page from ports 3/4, physical page = value |

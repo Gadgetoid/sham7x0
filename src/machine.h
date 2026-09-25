@@ -12,7 +12,7 @@ extern "C" {
 #define MACHINE_SCREEN_ROW_BYTES  30
 #define MACHINE_KEY_COLUMNS       11
 #define MACHINE_KEY_ROWS          8
-#define MACHINE_CLOCK_HZ          6000000
+#define MACHINE_CLOCK_HZ          9830400
 #define MACHINE_POWER_KEY_COLUMN  99
 #define MACHINE_ADDIN_SLOTS       10
 

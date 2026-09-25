@@ -101,6 +101,7 @@ static double step_time_ms = 0;
 static int action_step = 0;
 static uint32_t last_step_ms = 0;
 static int boots = 0;
+static uint64_t emulated_ms = 0;
 static bool persist = false;
 static char state_path[1024];
 static uint32_t last_save_ms = 0;
@@ -396,16 +397,19 @@ static void load_state(void) {
     console_notice("restored saved state");
 }
 
+static uint64_t cycles_for_ms(uint64_t ms) {
+    return ms * MACHINE_CLOCK_HZ / 1000;
+}
+
 static void queue_sound(float frequency, uint64_t until) {
-    uint64_t cycles_per_ms = MACHINE_CLOCK_HZ / 1000;
-    uint64_t whole_ms = (until - sound_cursor) / cycles_per_ms;
+    uint64_t whole_ms = (until - sound_cursor) * 1000 / MACHINE_CLOCK_HZ;
     if (whole_ms == 0) return;
     if (beeper_sound()) {
         bool busy = beeper_busy();
         if (frequency > 0 && !busy) beeper_tone(0, 0, AUDIO_LATENCY_MS);
         if (frequency > 0 || busy) beeper_tone(frequency, 0, (uint32_t)whole_ms);
     }
-    sound_cursor += whole_ms * cycles_per_ms;
+    sound_cursor += cycles_for_ms(whole_ms);
 }
 
 static void drain_sound(void) {
@@ -514,7 +518,9 @@ void runtime_step(void) {
     for (uint32_t done = 0; done < elapsed; done += slice_ms) {
         uint32_t this_slice = elapsed - done < slice_ms ? elapsed - done : slice_ms;
         advance_keys(this_slice);
-        machine_run(machine, MACHINE_CLOCK_HZ / 1000 * this_slice);
+        uint64_t cycles = cycles_for_ms(emulated_ms + this_slice) - cycles_for_ms(emulated_ms);
+        emulated_ms += this_slice;
+        machine_run(machine, (uint32_t)cycles);
     }
     drain_sound();
     present_lcd();
