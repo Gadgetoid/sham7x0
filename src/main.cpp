@@ -19,6 +19,7 @@
 #include "imgui_impl_sdlrenderer3.h"
 
 #include "beeper.h"
+#include "browser.h"
 #include "console.h"
 #include "device.h"
 #include "host.h"
@@ -145,7 +146,7 @@ static int menu_item_named(const std::string &name) {
         { "reload", MENU_RELOAD }, { "interrupt", MENU_INTERRUPT }, { "initialize", MENU_INITIALIZE }, { "test-mode", MENU_TEST_MODE }, { "show-console", MENU_SHOW_CONSOLE },
         { "focus-console", MENU_FOCUS_CONSOLE }, { "backlight", MENU_BACKLIGHT }, { "dead-columns", MENU_DEAD_COLUMNS },
         { "period", MENU_FPS_FIRST + 5 }, { "sound", MENU_SOUND },
-        { "next-layout", MENU_LAYOUT_NEXT }, { "scratches", MENU_SCRATCHES }, { "wear", MENU_WEAR }, { "touchscreen", MENU_TOUCHSCREEN },
+        { "next-layout", MENU_LAYOUT_NEXT }, { "apps", MENU_APP_BROWSER }, { "scratches", MENU_SCRATCHES }, { "wear", MENU_WEAR }, { "touchscreen", MENU_TOUCHSCREEN },
     };
     for (auto &entry : names) {
         if (name == entry.first) return entry.second;
@@ -159,7 +160,7 @@ static void usage() {
         "  --rom=FILE          firmware image (default rom/r162.da1)\n"
         "  --data=DIR          settings and saved machine state (default data)\n"
         "  --fresh             ignore and do not write the saved machine state\n"
-        "  --apps=DIR          where Install .wzd starts looking (default apps)\n"
+        "  --apps=DIR          App Browser catalogue and where Install .wzd starts looking (default apps)\n"
         "  --install=FILE      install a .wzd program after boot, repeatable\n"
         "  --size=WxH          window size (default 1400x900)\n"
         "  --dead-columns      simulate failed LCD column drivers\n"
@@ -173,7 +174,7 @@ static void usage() {
         "  --fps=N             device frame rate, 0 for unlimited (default 0)\n"
         "  --response=N        LCD response time scale, 0 instant, 1 normal, 4 very slow\n"
         "  --menu=ITEMS        trigger menu items after boot: reload, interrupt, initialize, test-mode, show-console,\n"
-        "                      focus-console, backlight, dead-columns, sound, period,\n"
+        "                      focus-console, backlight, dead-columns, sound, period, apps,\n"
         "                      show-keys\n"
         "  --keys=SEQUENCE     type into the device after boot, {DOWN} {ENTER} {F1}, {+LEFT} holds, {-LEFT} releases\n"
         "  --exec=COMMAND      run a console command after boot, repeatable (type help in the console)\n"
@@ -589,6 +590,7 @@ int main(int argc, char **argv) {
     KeyScript script;
     script.parse(options.keys);
 
+    browser_set_directory(options.apps.c_str());
     menu_install();
 
     bool running = true;
@@ -625,11 +627,7 @@ int main(int argc, char **argv) {
             if (event.type == SDL_EVENT_KEY_DOWN) {
                 SDL_Keycode key = event.key.key;
                 SDL_Keymod mod = event.key.mod;
-                if ((mod & SDL_KMOD_CTRL) && key == SDLK_C) {
-                    if (device_focused || runtime_console_busy()) runtime_interrupt();
-                    else console_cancel();
-                    continue;
-                }
+                if ((mod & SDL_KMOD_CTRL) && key == SDLK_C) continue;
                 if (!device_focused || !device.powered || (mod & SDL_KMOD_GUI)) continue;
                 if (uint32_t code = held_code(key)) keys_set_held(code, true);
                 if (uint32_t code = special_key(key)) {
@@ -660,7 +658,10 @@ int main(int argc, char **argv) {
             }
             switch (item) {
                 case MENU_RELOAD:       runtime_request_reload(); break;
-                case MENU_INTERRUPT:    runtime_interrupt(); break;
+                case MENU_INTERRUPT:
+                    if (device_focused || runtime_console_busy()) runtime_interrupt();
+                    else console_cancel();
+                    break;
                 case MENU_INITIALIZE:   runtime_initialize_memory(); break;
                 case MENU_TEST_MODE:    runtime_enter_test_mode(); break;
                 case MENU_INSTALL_WZD: {
@@ -668,6 +669,7 @@ int main(int argc, char **argv) {
                     SDL_ShowOpenFileDialog(install_chosen, nullptr, window, filters, 1, options.apps.c_str(), true);
                     break;
                 }
+                case MENU_APP_BROWSER:  browser_toggle(); break;
                 case MENU_SHOW_CONSOLE:
                     show_console = !show_console;
                     set_console_visible(window, show_console, device, restore_height);
@@ -786,10 +788,12 @@ int main(int argc, char **argv) {
             console_draw();
         }
         ImGui::End();
+        browser_draw(renderer);
 
         ImGui::Render();
-        if (device_focused && io.WantTextInput) keys_release_all();
-        device_focused = !io.WantTextInput;
+        bool device_keys = !io.WantTextInput && !browser_focused();
+        if (device_focused && !device_keys) keys_release_all();
+        device_focused = device_keys;
         if (device_focused && !SDL_TextInputActive(window)) SDL_StartTextInput(window);
 
         SDL_SetRenderScale(renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
@@ -809,6 +813,7 @@ int main(int argc, char **argv) {
     touch_stop();
     runtime_deinit();
     beeper_deinit();
+    browser_shutdown();
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();

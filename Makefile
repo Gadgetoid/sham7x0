@@ -29,6 +29,7 @@ SRC_OBJC = src/menu_macos.m
 SRC_APP_CXX = \
 	src/main.cpp \
 	src/device.cpp \
+	src/browser.cpp \
 	src/console.cpp
 
 SRC_IMGUI = $(addprefix $(IMGUI)/, \

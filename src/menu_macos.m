@@ -19,7 +19,7 @@ static NSMenuItem *items[MENU_COUNT];
 @end
 
 static PocketMenuTarget *target = nil;
-static NSMenuItem *holders[2];
+static NSMenuItem *holders[4];
 static int holder_count = 0;
 
 static void add_item(NSMenu *menu, int tag, NSString *title, NSString *key, NSEventModifierFlags modifiers) {
@@ -67,36 +67,39 @@ void menu_install(void) {
     target = [[PocketMenuTarget alloc] init];
 
     NSMenu *run = add_menu(@"Run");
+    add_item(run, MENU_INTERRUPT, @"Power", @"c", NSEventModifierFlagControl);
+    [run addItem:[NSMenuItem separatorItem]];
     add_item(run, MENU_RELOAD, @"Reset", @"r", NSEventModifierFlagCommand);
-    add_item(run, MENU_INTERRUPT, @"Press ON (Ctrl-C)", @"", 0);
     add_item(run, MENU_INITIALIZE, @"Initialize Memory", @"", 0);
     add_item(run, MENU_TEST_MODE, @"Factory Test Mode", @"", 0);
-    add_item(run, MENU_INSTALL_WZD, @"Install .wzd…", @"i", NSEventModifierFlagCommand);
-    [run addItem:[NSMenuItem separatorItem]];
-    add_item(run, MENU_SHOW_CONSOLE, @"Show Console", @"j", NSEventModifierFlagCommand);
-    add_item(run, MENU_FOCUS_CONSOLE, @"Focus Console", @"l", NSEventModifierFlagCommand);
 
-    NSMenu *system = add_menu(@"System");
-    NSMenu *layout = submenu(system, @"Layout");
+    NSMenu *install = add_menu(@"Install");
+    add_item(install, MENU_INSTALL_WZD, @"Install .wzd…", @"i", NSEventModifierFlagCommand);
+    add_item(install, MENU_APP_BROWSER, @"App Browser", @"i", NSEventModifierFlagCommand | NSEventModifierFlagShift);
+
+    NSMenu *view = add_menu(@"View");
     NSString *layouts[] = { @"Screen Only", @"Screen & Frame", @"Screen & Buttons", @"Screen & Keyboard" };
-    for (int i = 0; i < MENU_LAYOUT_END - MENU_LAYOUT_FIRST; i++) add_item(layout, MENU_LAYOUT_FIRST + i, layouts[i], @"", 0);
-    [layout addItem:[NSMenuItem separatorItem]];
-    add_item(layout, MENU_LAYOUT_NEXT, @"Next Layout", @"k", NSEventModifierFlagCommand);
-    [layout addItem:[NSMenuItem separatorItem]];
-    add_item(layout, MENU_TOUCHSCREEN, @"Touchscreen Mode", @"t", NSEventModifierFlagCommand | NSEventModifierFlagShift);
-    [system addItem:[NSMenuItem separatorItem]];
-    NSMenu *realism = submenu(system, @"Realism");
+    for (int i = 0; i < MENU_LAYOUT_END - MENU_LAYOUT_FIRST; i++) add_item(view, MENU_LAYOUT_FIRST + i, layouts[i], @"", 0);
+    add_item(view, MENU_LAYOUT_NEXT, @"Next Layout", @"k", NSEventModifierFlagCommand);
+    [view addItem:[NSMenuItem separatorItem]];
+    add_item(view, MENU_TOUCHSCREEN, @"Touchscreen Mode", @"t", NSEventModifierFlagCommand | NSEventModifierFlagShift);
+    [view addItem:[NSMenuItem separatorItem]];
+    add_item(view, MENU_SHOW_CONSOLE, @"Show Console", @"j", NSEventModifierFlagCommand);
+    add_item(view, MENU_FOCUS_CONSOLE, @"Focus Console", @"l", NSEventModifierFlagCommand);
+    [view addItem:[NSMenuItem separatorItem]];
+    NSMenu *realism = submenu(view, @"Realism");
     add_item(realism, MENU_DEAD_COLUMNS, @"Dead Columns", @"d", NSEventModifierFlagCommand);
     add_item(realism, MENU_SCRATCHES, @"Scratches", @"", 0);
     add_item(realism, MENU_WEAR, @"Wear", @"", 0);
-    [system addItem:[NSMenuItem separatorItem]];
-    add_item(system, MENU_BACKLIGHT, @"Backlight", @"b", NSEventModifierFlagCommand);
-    add_item(system, MENU_SOUND, @"Sound", @"", 0);
-    [system addItem:[NSMenuItem separatorItem]];
-    NSMenu *rate = submenu(system, @"Frame Rate");
+
+    NSMenu *emulation = add_menu(@"Emulation");
+    add_item(emulation, MENU_BACKLIGHT, @"Backlight", @"b", NSEventModifierFlagCommand);
+    add_item(emulation, MENU_SOUND, @"Sound", @"", 0);
+    [emulation addItem:[NSMenuItem separatorItem]];
+    NSMenu *rate = submenu(emulation, @"Frame Rate");
     NSString *rates[] = { @"Unlimited", @"60 fps", @"30 fps", @"20 fps", @"15 fps", @"10 fps" };
     for (int i = 0; i < MENU_FPS_END - MENU_FPS_FIRST; i++) add_item(rate, MENU_FPS_FIRST + i, rates[i], @"", 0);
-    NSMenu *response = submenu(system, @"Response Time");
+    NSMenu *response = submenu(emulation, @"Response Time");
     NSString *responses[] = { @"Instant", @"Fast", @"Normal", @"Slow", @"Very Slow" };
     for (int i = 0; i < MENU_RESPONSE_END - MENU_RESPONSE_FIRST; i++) add_item(response, MENU_RESPONSE_FIRST + i, responses[i], @"", 0);
     attach_menus();

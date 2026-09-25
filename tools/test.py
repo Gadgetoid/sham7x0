@@ -42,7 +42,7 @@ CASES = [
      "keys": [(0.5, MEMO, 0.2), (1.5, NEW, 0.2), (2.5, SHIFT, 0.5), (2.6, KEY_H, 0.2), (3.5, KEY_I, 0.2)]},
     {"name": "power_off", "load": "main", "seconds": 2, "keys": [(0.5, POWER, 0.3)], "lcd": "lcd on 0"},
     {"name": "backlight", "load": "main", "seconds": 2, "keys": [(0.5, BACKLIGHT, 0.2)], "lcd": "backlight 1"},
-    {"name": "programs_listed", "load": "main", "install": ["Serial01", "Pegs", "Pong"], "seconds": 2,
+    {"name": "programs_listed", "load": "main", "install": ["programs/Serial01 TST", "basic/Pegs", "programs/Pong"], "seconds": 2,
      "keys": [(0.5, PROG, 0.2)], "save": "programs"},
     {"name": "basic_program_runs", "load": "programs", "seconds": 4, "keys": [(0.5, "2.0", 0.2)]},
     {"name": "machine_code_program_runs", "load": "programs", "seconds": 4, "keys": [(0.5, "3.0", 0.2)]},

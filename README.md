@@ -41,7 +41,9 @@ Headless keys are `SECONDS:COLUMN.ROW/HOLD`. Column 99 is the ON key.
 
 ## Installing programs
 
-Run > Install .wzd (Cmd-I), `--install=FILE` or the console `install PATH` writes a BASIC or machine code `.wzd` straight into a free My Programs slot. Put test files in `apps/` (ignored by git). MEMO and SCHEDULE `.wzd` files aren't supported yet.
+Install > Install .wzd (Cmd-I), `--install=FILE` or the console `install PATH` writes a BASIC or machine code `.wzd` straight into a free My Programs slot. Put test files in `apps/` (ignored by git), sorted into `programs/`, `basic/`, `memo/` and `schedule/` by data type. MEMO and SCHEDULE `.wzd` files aren't supported yet.
+
+Install > App Browser (Cmd-Shift-I, `--menu=apps`) searches the `index.json` in each of those directories by title, description and category, shows the screenshot and installs the selected program. Up/Down and Page Up/Down move the selection, Enter or a double-click installs. Each `index.json` is an array of objects with `file`, `original_file`, `title`, `data_type`, `category`, `description`, `alert`, `source_url` and `screenshot` (relative to the directory).
 
 A slot is 32KB at page 60 + 4n, ten in all:
 
