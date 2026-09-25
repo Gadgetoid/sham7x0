@@ -312,6 +312,7 @@ static void push_mouse(uint8_t kind, float x, float y) {
 struct Touchscreen {
     bool active = false;
     SDL_Rect windowed = {};
+    SDL_Rect panel = {};
 };
 
 static SDL_DisplayID find_display(const std::string &name) {
@@ -345,6 +346,7 @@ static bool set_touchscreen(SDL_Window *window, Touchscreen &touch, bool enable,
         SDL_SetWindowSize(window, bounds.w, bounds.h);
         window_cover_display(native, true);
         touch_set_panel(bounds.w, bounds.h);
+        touch.panel = bounds;
         touch_start();
         SDL_RaiseWindow(window);
         SDL_Log("touchscreen: covering %s (%dx%d at %d,%d)", SDL_GetDisplayName(display), bounds.w, bounds.h, bounds.x, bounds.y);
@@ -736,7 +738,10 @@ int main(int argc, char **argv) {
             push_mouse(frame == 80 ? TOUCH_DOWN : TOUCH_UP, x, y);
         }
         for (touch_event_t event; touch_pop(&event);) {
-            if (touch.active) push_mouse(event.kind, event.x, event.y);
+            if (!touch.active) continue;
+            int window_x = 0, window_y = 0;
+            SDL_GetWindowPosition(window, &window_x, &window_y);
+            push_mouse(event.kind, event.x + touch.panel.x - window_x, event.y + touch.panel.y - window_y);
         }
         device.touch = touch.active;
         if (frame == 45) {

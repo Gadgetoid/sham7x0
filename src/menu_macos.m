@@ -130,10 +130,12 @@ bool window_cover_display(void *handle, bool cover) {
     NSWindow *window = (__bridge NSWindow *)handle;
     if (!window) return false;
     if (cover) {
+        NSApp.presentationOptions = NSApplicationPresentationAutoHideMenuBar | NSApplicationPresentationAutoHideDock;
         window.level = NSMainMenuWindowLevel + 1;
         window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorStationary |
                                     NSWindowCollectionBehaviorFullScreenNone;
     } else {
+        NSApp.presentationOptions = NSApplicationPresentationDefault;
         window.level = NSNormalWindowLevel;
         window.collectionBehavior = NSWindowCollectionBehaviorDefault;
     }

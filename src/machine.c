@@ -90,7 +90,6 @@ struct machine {
     uint8_t  keys[MACHINE_KEY_COLUMNS];
     bool     power_key;
     uint8_t  ports[256];
-    bool     port_seen[256][2];
     bool     trace_ports;
     uint32_t cycles_into_tick;
     rtc_t    rtc;
@@ -250,11 +249,9 @@ static uint8_t keyboard_rows(machine_t *machine) {
 }
 
 static void note_port(machine_t *machine, uint8_t port, bool write, uint8_t value) {
-    if (machine->trace_ports || !machine->port_seen[port][write]) {
-        machine_log(machine, "%s port %02x %s %02x at pc %04x t %.3f", machine->port_seen[port][write] ? "" : "new", port,
-                    write ? "<-" : "->", value, machine->cpu.pc, (double)machine->cpu.cyc / MACHINE_CLOCK_HZ);
-        machine->port_seen[port][write] = true;
-    }
+    if (!machine->trace_ports) return;
+    machine_log(machine, "port %02x %s %02x at pc %04x t %.3f", port, write ? "<-" : "->", value, machine->cpu.pc,
+                (double)machine->cpu.cyc / MACHINE_CLOCK_HZ);
 }
 
 static uint8_t rtc_read(machine_t *machine, uint8_t index) {
