@@ -33,6 +33,12 @@ Clicked keyboard keys go straight to the key matrix, so Shift, 2nd and CAPS beha
 
 Headless keys are `SECONDS:COLUMN.ROW/HOLD`. Column 99 is the ON key.
 
+`--serial[=LINK]` connects the UART to a pty (symlinked at `LINK`) and runs in real time; `--serial-log=FILE` records the traffic. PC SYNC (2nd, MENU) and WizTerm work against it.
+
+```
+./headless rom/r162.da1 --load=STATE --seconds=600 --serial=/tmp/wizard --keys=0.6:0.6/0.2,1.6:1.6/0.2
+```
+
 ## Installing programs
 
 Run > Install .wzd (Cmd-I), `--install=FILE` or the console `install PATH` writes a BASIC or machine code `.wzd` straight into a free My Programs slot. Put test files in `apps/` (ignored by git). MEMO and SCHEDULE `.wzd` files aren't supported yet.
@@ -64,14 +70,14 @@ From the firmware and [ozdev](https://github.com/arpruss/ozdev).
 | Pages 000-17F | flash, firmware in 000-047, data from 048 |
 | Page 300 | LCD control word: bit 7 on, bit 6 blank, bits 0-5 contrast, bit 8 backlight |
 | Pages 400+ | RAM, display at 400 or 404 (port 22/23) |
-| Ports 5/6/7 | interrupt status / acknowledge / mask. Bit 0 keyboard, 4 1Hz RTC, 5 64Hz tick, 7 ON key |
+| Ports 5/6/7 | interrupt status / acknowledge / mask. Bit 0 keyboard, 2 UART, 4 1Hz RTC, 5 64Hz tick, 7 ON key |
 | Port 8 | sleep before HALT |
 | Ports 10/11/12 | keyboard rows / columns 0-7 / columns 8-10. Keycode table at 0x23a3. Column 9 rows 0-4 are MAIN, TEL, CAL, MEMO, PROG |
 | Port 12 read | status inputs, bits 7, 6, 5, 3 (battery, switch) |
 | Port 46 bit 4 | ON key |
 | Ports 30-3F | RP5C01-style RTC, one BCD nibble per register |
 | Ports 16-19 | sound: 19 tone mode, 17/18 divisor, 16 bit 0 on. 16384 / (divisor + 2) Hz |
-| Ports 40-47 | UART |
+| Ports 40-47 | 8250 UART, 153600 / divisor baud. PC SYNC polls THRE to send and takes receive interrupts |
 | Flash | Intel/Sharp command set (FF, 40, 20/D0, 50, 60, 70, 90), 64KB erase blocks, ID 89/A6 |
 | RAM | pages 400-40F and 500-50F (firmware maps 410-41F to 500-50F) |
 | Layout | system to 0BFFFF, add-ons 0C0000-10FFFF, data 110000-2EFFFF, marker at 2F0000 |
@@ -79,4 +85,4 @@ From the firmware and [ozdev](https://github.com/arpruss/ozdev).
 ## Not done
 
 - Port 12 status inputs always report battery and switch OK.
-- Serial and IrDA are stubs, so PC sync and add-on installs don't work.
+- IrDA is a stub. The UART has no modem status inputs besides the ON key, and never overruns or reports line errors.

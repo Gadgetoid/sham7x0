@@ -1,9 +1,78 @@
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <termios.h>
+#include <time.h>
+#include <unistd.h>
+#include <util.h>
 
 #include "machine.h"
 #include "wzd.h"
+
+typedef struct {
+    int   master;
+    FILE *log;
+    int   log_direction;
+    int   log_column;
+    uint8_t pending[4096];
+    size_t  pending_length;
+} serial_bridge_t;
+
+static void serial_log_byte(serial_bridge_t *bridge, int direction, uint8_t value) {
+    if (!bridge->log) return;
+    if (direction != bridge->log_direction || bridge->log_column == 32) {
+        fprintf(bridge->log, "%s%s", bridge->log_column ? "\n" : "", direction ? "wizard>" : "host>  ");
+        bridge->log_direction = direction;
+        bridge->log_column = 0;
+    }
+    fprintf(bridge->log, " %02x", value);
+    bridge->log_column++;
+}
+
+static void serial_output(void *context, uint8_t value) {
+    serial_bridge_t *bridge = context;
+    serial_log_byte(bridge, 1, value);
+    while (write(bridge->master, &value, 1) < 0 && errno == EAGAIN) usleep(100);
+}
+
+static bool serial_open(serial_bridge_t *bridge, const char *link_path) {
+    int slave = -1;
+    char name[128];
+    if (openpty(&bridge->master, &slave, name, NULL, NULL) < 0) return false;
+    struct termios settings;
+    tcgetattr(slave, &settings);
+    cfmakeraw(&settings);
+    tcsetattr(slave, TCSANOW, &settings);
+    fcntl(bridge->master, F_SETFL, fcntl(bridge->master, F_GETFL) | O_NONBLOCK);
+    if (link_path) {
+        unlink(link_path);
+        if (symlink(name, link_path) < 0) return false;
+    }
+    fprintf(stderr, "serial %s%s%s\n", name, link_path ? " linked at " : "", link_path ? link_path : "");
+    return true;
+}
+
+static void serial_poll(serial_bridge_t *bridge, machine_t *machine) {
+    if (bridge->pending_length < sizeof bridge->pending) {
+        ssize_t count = read(bridge->master, bridge->pending + bridge->pending_length, sizeof bridge->pending - bridge->pending_length);
+        if (count > 0) {
+            for (ssize_t i = 0; i < count; i++) serial_log_byte(bridge, 0, bridge->pending[bridge->pending_length + (size_t)i]);
+            bridge->pending_length += (size_t)count;
+        }
+    }
+    size_t accepted = machine_serial_input(machine, bridge->pending, bridge->pending_length);
+    memmove(bridge->pending, bridge->pending + accepted, bridge->pending_length - accepted);
+    bridge->pending_length -= accepted;
+    if (bridge->log) fflush(bridge->log);
+}
+
+static double wall_seconds(void) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (double)now.tv_sec + (double)now.tv_nsec / 1e9;
+}
 
 typedef struct {
     double at_seconds;
@@ -93,7 +162,23 @@ int main(int argc, char **argv) {
     static uint32_t histogram[65536];
     static key_event_t events[1024];
     int event_count = 0;
+    bool serial = false;
+    const char *serial_link = NULL;
+    const char *serial_log_path = NULL;
     for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--serial") == 0) {
+            serial = true;
+            continue;
+        }
+        if (strncmp(argv[i], "--serial=", 9) == 0) {
+            serial = true;
+            serial_link = argv[i] + 9;
+            continue;
+        }
+        if (strncmp(argv[i], "--serial-log=", 13) == 0) {
+            serial_log_path = argv[i] + 13;
+            continue;
+        }
         if (strncmp(argv[i], "--seconds=", 10) == 0) seconds = atof(argv[i] + 10);
         else if (strncmp(argv[i], "--pbm=", 6) == 0) pbm_path = argv[i] + 6;
         else if (strncmp(argv[i], "--load=", 7) == 0) load_path = argv[i] + 7;
@@ -111,7 +196,7 @@ int main(int argc, char **argv) {
         else rom_path = argv[i];
     }
     if (!rom_path) {
-        fprintf(stderr, "usage: headless ROM [--seconds=N] [--pbm=FILE] [--load=STATE] [--save=STATE] [--trace-ports] [--keys=T:COL.ROW/HOLD,...]\n");
+        fprintf(stderr, "usage: headless ROM [--seconds=N] [--pbm=FILE] [--load=STATE] [--save=STATE] [--trace-ports] [--keys=T:COL.ROW/HOLD,...] [--serial[=LINK]] [--serial-log=FILE]\n");
         return 1;
     }
     size_t size = 0;
@@ -148,10 +233,26 @@ int main(int argc, char **argv) {
     }
     machine_set_trace_ports(machine, trace_ports);
     machine_set_watch_pc(machine, watch_pc);
+    static serial_bridge_t bridge;
+    if (serial) {
+        if (!serial_open(&bridge, serial_link)) {
+            fprintf(stderr, "cannot open serial pty\n");
+            return 1;
+        }
+        if (serial_log_path) bridge.log = fopen(serial_log_path, "w");
+        bridge.log_direction = -1;
+        machine_set_serial_output(machine, serial_output, &bridge);
+    }
+    double started = wall_seconds();
     const int slices_per_second = 100;
     int total_slices = (int)(seconds * slices_per_second);
     for (int slice = 0; slice < total_slices; slice++) {
         double now = (double)slice / slices_per_second;
+        if (serial) {
+            double ahead = now - (wall_seconds() - started);
+            if (ahead > 0) usleep((useconds_t)(ahead * 1e6));
+            serial_poll(&bridge, machine);
+        }
         for (int i = 0; i < event_count; i++) {
             if (events[i].at_seconds >= now && events[i].at_seconds < now + 1.0 / slices_per_second) {
                 if (events[i].column == MACHINE_POWER_KEY_COLUMN) machine_set_power_key(machine, events[i].down);

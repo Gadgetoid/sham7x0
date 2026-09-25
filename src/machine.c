@@ -27,6 +27,7 @@
 #define TICK_HZ              64
 
 #define INTERRUPT_KEYBOARD   0x01
+#define INTERRUPT_SERIAL     0x04
 #define INTERRUPT_SECOND     0x10
 #define INTERRUPT_TICK       0x20
 #define INTERRUPT_POWER_KEY  0x80
@@ -35,6 +36,18 @@
 #define SOUND_QUEUE_SIZE     256
 #define SOUND_BASE_HZ        16384.0f
 #define SNAPSHOT_MAGIC       "ZQ77XSNAP3"
+#define UART_CLOCK_BAUD      153600
+#define UART_BITS_PER_BYTE   10
+#define UART_RX_QUEUE_SIZE   4096
+#define UART_LCR_DLAB        0x80
+#define UART_IER_RX          0x01
+#define UART_IER_THRE        0x02
+#define UART_LSR_DATA_READY  0x01
+#define UART_LSR_THRE        0x20
+#define UART_LSR_TEMT        0x40
+#define UART_IIR_NONE        0x01
+#define UART_IIR_THRE        0x02
+#define UART_IIR_RX          0x04
 
 typedef enum {
     FLASH_READ_ARRAY,
@@ -56,6 +69,26 @@ typedef struct {
     uint8_t  mode;
     uint32_t cycles_into_second;
 } rtc_t;
+
+typedef struct {
+    uint8_t  divisor_low;
+    uint8_t  divisor_high;
+    uint8_t  interrupt_enable;
+    uint8_t  line_control;
+    uint8_t  modem_control;
+    uint8_t  scratch;
+    uint8_t  receive_buffer;
+    bool     receive_full;
+    bool     transmit_busy;
+    bool     transmit_empty_pending;
+    uint64_t receive_ready_at;
+    uint64_t transmit_done_at;
+    uint8_t  queue[UART_RX_QUEUE_SIZE];
+    unsigned queue_head;
+    unsigned queue_tail;
+    machine_serial_out_fn output;
+    void    *output_context;
+} uart_t;
 
 typedef struct {
     uint16_t low_window_page;
@@ -93,6 +126,7 @@ struct machine {
     bool     trace_ports;
     uint32_t cycles_into_tick;
     rtc_t    rtc;
+    uart_t   uart;
     uint8_t  screen[MACHINE_SCREEN_ROW_BYTES * MACHINE_SCREEN_HEIGHT];
     machine_log_fn log;
     uint32_t *pc_histogram;
@@ -331,6 +365,101 @@ static void update_sound(machine_t *machine) {
     machine->sound_head = next;
 }
 
+static uint64_t uart_byte_cycles(const uart_t *uart) {
+    unsigned divisor = (unsigned)(uart->divisor_low | uart->divisor_high << 8);
+    if (divisor == 0) divisor = 0x10000;
+    return (uint64_t)MACHINE_CLOCK_HZ * UART_BITS_PER_BYTE * divisor / UART_CLOCK_BAUD;
+}
+
+static void uart_update(machine_t *machine) {
+    uart_t *uart = &machine->uart;
+    uint64_t now = machine->cpu.cyc;
+    if (uart->transmit_busy && now >= uart->transmit_done_at) {
+        uart->transmit_busy = false;
+        uart->transmit_empty_pending = true;
+    }
+    if (!uart->receive_full && uart->queue_tail != uart->queue_head && now >= uart->receive_ready_at) {
+        uart->receive_buffer = uart->queue[uart->queue_tail];
+        uart->queue_tail = (uart->queue_tail + 1) % UART_RX_QUEUE_SIZE;
+        uart->receive_full = true;
+    }
+    bool receive_interrupt = (uart->interrupt_enable & UART_IER_RX) && uart->receive_full;
+    bool transmit_interrupt = (uart->interrupt_enable & UART_IER_THRE) && uart->transmit_empty_pending;
+    if (receive_interrupt || transmit_interrupt) machine->interrupt_status |= INTERRUPT_SERIAL;
+}
+
+static uint8_t uart_read(machine_t *machine, uint8_t index) {
+    uart_t *uart = &machine->uart;
+    bool latch = uart->line_control & UART_LCR_DLAB;
+    switch (index) {
+        case 0:
+            if (latch) return uart->divisor_low;
+            if (uart->receive_full) {
+                uart->receive_full = false;
+                uart->receive_ready_at = machine->cpu.cyc + uart_byte_cycles(uart);
+            }
+            return uart->receive_buffer;
+        case 1: return latch ? uart->divisor_high : uart->interrupt_enable;
+        case 2:
+            if ((uart->interrupt_enable & UART_IER_RX) && uart->receive_full) return UART_IIR_RX;
+            if ((uart->interrupt_enable & UART_IER_THRE) && uart->transmit_empty_pending) {
+                uart->transmit_empty_pending = false;
+                return UART_IIR_THRE;
+            }
+            return UART_IIR_NONE;
+        case 3: return uart->line_control;
+        case 4: return uart->modem_control;
+        case 5: return (uint8_t)((uart->receive_full ? UART_LSR_DATA_READY : 0) | (uart->transmit_busy ? 0 : UART_LSR_THRE | UART_LSR_TEMT));
+        default: return uart->scratch;
+    }
+}
+
+static void uart_write(machine_t *machine, uint8_t index, uint8_t value) {
+    uart_t *uart = &machine->uart;
+    bool latch = uart->line_control & UART_LCR_DLAB;
+    switch (index) {
+        case 0:
+            if (latch) {
+                uart->divisor_low = value;
+                return;
+            }
+            if (uart->output) uart->output(uart->output_context, value);
+            uart->transmit_busy = true;
+            uart->transmit_empty_pending = false;
+            uart->transmit_done_at = machine->cpu.cyc + uart_byte_cycles(uart);
+            return;
+        case 1:
+            if (latch) {
+                uart->divisor_high = value;
+                return;
+            }
+            if ((value & UART_IER_THRE) && !(uart->interrupt_enable & UART_IER_THRE) && !uart->transmit_busy) uart->transmit_empty_pending = true;
+            uart->interrupt_enable = value & 0x0f;
+            return;
+        case 3: uart->line_control = value; return;
+        case 4: uart->modem_control = value; return;
+        case 7: uart->scratch = value; return;
+        default: return;
+    }
+}
+
+void machine_set_serial_output(machine_t *machine, machine_serial_out_fn output, void *context) {
+    machine->uart.output = output;
+    machine->uart.output_context = context;
+}
+
+size_t machine_serial_input(machine_t *machine, const uint8_t *data, size_t length) {
+    uart_t *uart = &machine->uart;
+    size_t accepted = 0;
+    while (accepted < length) {
+        unsigned next = (uart->queue_head + 1) % UART_RX_QUEUE_SIZE;
+        if (next == uart->queue_tail) break;
+        uart->queue[uart->queue_head] = data[accepted++];
+        uart->queue_head = next;
+    }
+    return accepted;
+}
+
 static uint8_t port_in(z80 *cpu, uint8_t port) {
     machine_t *machine = cpu->userdata;
     uint8_t value;
@@ -349,6 +478,7 @@ static uint8_t port_in(z80 *cpu, uint8_t port) {
         case 0x46: value = (uint8_t)((machine->ports[0x46] & ~POWER_KEY_BIT) | (machine->power_key ? POWER_KEY_BIT : 0)); break;
         default:
             if (port >= 0x30 && port <= 0x3f) value = rtc_read(machine, port - 0x30);
+            else if (port >= 0x40 && port <= 0x47) value = uart_read(machine, port - 0x40);
             else value = machine->ports[port];
             break;
     }
@@ -377,6 +507,7 @@ static void port_out(z80 *cpu, uint8_t port, uint8_t value) {
         case 0x19: update_sound(machine); break;
         default:
             if (port >= 0x30 && port <= 0x3f) rtc_write(machine, port - 0x30, value);
+            else if (port >= 0x40 && port <= 0x47) uart_write(machine, port - 0x40, value);
             break;
     }
     note_port(machine, port, true, value);
@@ -422,6 +553,17 @@ void machine_reset(machine_t *machine) {
     machine->lcd_control_written = false;
     machine->ports[0x16] = 0;
     update_sound(machine);
+    uart_t *uart = &machine->uart;
+    uart->divisor_low = 16;
+    uart->divisor_high = 0;
+    uart->interrupt_enable = 0;
+    uart->line_control = 0x03;
+    uart->modem_control = 0;
+    uart->receive_full = false;
+    uart->transmit_busy = false;
+    uart->transmit_empty_pending = false;
+    uart->receive_ready_at = 0;
+    uart->transmit_done_at = 0;
 }
 
 static void update_interrupt_line(machine_t *machine) {
@@ -435,6 +577,7 @@ void machine_run(machine_t *machine, uint32_t cycles) {
     unsigned long end = machine->cpu.cyc + cycles;
     while (machine->cpu.cyc < end) {
         unsigned long before = machine->cpu.cyc;
+        uart_update(machine);
         update_interrupt_line(machine);
         if (machine->pc_histogram) machine->pc_histogram[machine->cpu.pc]++;
         if (machine->cpu.pc == machine->watch_pc && machine->watch_hits < 5000) {
@@ -535,6 +678,9 @@ static void restore_state(machine_t *machine, const saved_state_t *state) {
     machine->cycles_into_tick = state->cycles_into_tick;
     machine->rtc = state->rtc;
     machine->flash_state = state->flash_state;
+    machine->uart.transmit_busy = false;
+    machine->uart.receive_ready_at = 0;
+    machine->uart.transmit_done_at = 0;
 }
 
 bool machine_save(machine_t *machine, const char *path, int64_t host_time) {

@@ -19,6 +19,7 @@ extern "C" {
 typedef struct machine machine_t;
 
 typedef void (*machine_log_fn)(const char *message);
+typedef void (*machine_serial_out_fn)(void *context, uint8_t value);
 
 typedef struct {
     uint64_t cycle;
@@ -55,6 +56,8 @@ int            machine_free_addin_slot(machine_t *machine);
 bool           machine_write_addin_slot(machine_t *machine, int slot, const uint8_t *data, size_t length);
 uint8_t        machine_peek(machine_t *machine, uint16_t address);
 bool           machine_read_page(machine_t *machine, uint16_t page, uint8_t *out, size_t length);
+void           machine_set_serial_output(machine_t *machine, machine_serial_out_fn output, void *context);
+size_t         machine_serial_input(machine_t *machine, const uint8_t *data, size_t length);
 
 #ifdef __cplusplus
 }
