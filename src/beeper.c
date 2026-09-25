@@ -7,7 +7,16 @@
 #define QUEUE_SIZE  256
 #define CHUNK       512
 #define VOLUME      0.16f
-#define SMOOTHING   0.35f
+#define PIEZO_HZ    3000.0f
+#define PIEZO_Q     1.0f
+#define ATTACK_MS   1.0f
+#define RELEASE_MS  3.0f
+#define SILENCE     1e-6f
+
+typedef struct {
+    float b0, b1, b2, a1, a2;
+    float x1, x2, y1, y2;
+} biquad_t;
 
 typedef struct {
     float frequency;
@@ -19,7 +28,11 @@ static tone_t queue[QUEUE_SIZE];
 static int head = 0, tail = 0;
 static tone_t current;
 static uint32_t remaining = 0;
-static float phase = 0, second_phase = 0, smoothed = 0;
+static float phase = 0, second_phase = 0, envelope = 0;
+static float attack = 0, release = 0;
+static bool sounding = false;
+static bool fading = true;
+static biquad_t piezo;
 static SDL_Mutex *lock = NULL;
 static SDL_AudioStream *stream = NULL;
 static bool sound_on = true;
@@ -30,26 +43,53 @@ bool beeper_sound(void) { return sound_on; }
 void beeper_set_key_click(bool on) { key_click_on = on; }
 bool beeper_key_click(void) { return key_click_on; }
 
-static float next_sample(void) {
-    if (remaining == 0) {
-        if (tail == head) return 0.0f;
-        current = queue[tail];
-        tail = (tail + 1) % QUEUE_SIZE;
-        remaining = current.samples;
-        if (remaining == 0) return 0.0f;
-    }
-    remaining--;
+static void setup_piezo(void) {
+    float w0 = 2.0f * (float)M_PI * PIEZO_HZ / SAMPLE_RATE;
+    float alpha = sinf(w0) / (2.0f * PIEZO_Q);
+    float a0 = 1.0f + alpha;
+    piezo = (biquad_t){ alpha / a0, 0.0f, -alpha / a0, -2.0f * cosf(w0) / a0, (1.0f - alpha) / a0, 0, 0, 0, 0 };
+    attack = 1.0f - expf(-1000.0f / (ATTACK_MS * SAMPLE_RATE));
+    release = 1.0f - expf(-1000.0f / (RELEASE_MS * SAMPLE_RATE));
+}
+
+static float filter(biquad_t *f, float x) {
+    float y = f->b0 * x + f->b1 * f->x1 + f->b2 * f->x2 - f->a1 * f->y1 - f->a2 * f->y2;
+    f->x2 = f->x1;
+    f->x1 = x;
+    f->y2 = f->y1;
+    f->y1 = y;
+    return y;
+}
+
+static float oscillate(const tone_t *tone) {
     float sample = 0.0f;
-    if (current.second_frequency > 0) {
+    if (tone->second_frequency > 0) {
         sample = 0.5f * (sinf(phase * 2.0f * (float)M_PI) + sinf(second_phase * 2.0f * (float)M_PI));
-    } else if (current.frequency > 0) {
+    } else if (tone->frequency > 0) {
         sample = phase < 0.5f ? 1.0f : -1.0f;
     }
-    phase += current.frequency / SAMPLE_RATE;
-    second_phase += current.second_frequency / SAMPLE_RATE;
+    phase += tone->frequency / SAMPLE_RATE;
+    second_phase += tone->second_frequency / SAMPLE_RATE;
     phase -= floorf(phase);
     second_phase -= floorf(second_phase);
     return sample;
+}
+
+static float next_sample(void) {
+    sounding = false;
+    if (remaining == 0 && tail != head) {
+        tone_t next = queue[tail];
+        tail = (tail + 1) % QUEUE_SIZE;
+        remaining = next.samples;
+        fading = !(next.frequency > 0 || next.second_frequency > 0);
+        if (!fading) current = next;
+    }
+    if (remaining == 0) fading = true;
+    else {
+        remaining--;
+        sounding = !fading;
+    }
+    return oscillate(&current);
 }
 
 static void SDLCALL feed(void *user, SDL_AudioStream *audio, int additional, int total) {
@@ -61,8 +101,13 @@ static void SDLCALL feed(void *user, SDL_AudioStream *audio, int additional, int
         int count = wanted < CHUNK ? wanted : CHUNK;
         SDL_LockMutex(lock);
         for (int i = 0; i < count; i++) {
-            smoothed += (next_sample() - smoothed) * SMOOTHING;
-            buffer[i] = smoothed * VOLUME;
+            float oscillator = next_sample();
+            envelope += ((sounding ? 1.0f : 0.0f) - envelope) * (sounding ? attack : release);
+            if (!sounding && envelope < SILENCE) {
+                envelope = 0;
+                if (fabsf(piezo.y1) < SILENCE && fabsf(piezo.y2) < SILENCE) piezo.x1 = piezo.x2 = piezo.y1 = piezo.y2 = 0;
+            }
+            buffer[i] = filter(&piezo, oscillator * envelope) * VOLUME;
         }
         SDL_UnlockMutex(lock);
         SDL_PutAudioStreamData(audio, buffer, count * (int)sizeof(float));
@@ -71,6 +116,7 @@ static void SDLCALL feed(void *user, SDL_AudioStream *audio, int additional, int
 }
 
 bool beeper_init(void) {
+    setup_piezo();
     lock = SDL_CreateMutex();
     SDL_AudioSpec spec = { SDL_AUDIO_F32, 1, SAMPLE_RATE };
     stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, feed, NULL);
