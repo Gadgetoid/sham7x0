@@ -142,7 +142,7 @@ static std::string data_argument(int argc, char **argv) {
 
 static int menu_item_named(const std::string &name) {
     static const std::pair<const char *, int> names[] = {
-        { "reload", MENU_RELOAD }, { "interrupt", MENU_INTERRUPT }, { "initialize", MENU_INITIALIZE }, { "show-repl", MENU_SHOW_REPL },
+        { "reload", MENU_RELOAD }, { "interrupt", MENU_INTERRUPT }, { "initialize", MENU_INITIALIZE }, { "test-mode", MENU_TEST_MODE }, { "show-repl", MENU_SHOW_REPL },
         { "focus-repl", MENU_FOCUS_REPL }, { "backlight", MENU_BACKLIGHT }, { "dead-columns", MENU_DEAD_COLUMNS },
         { "period", MENU_FPS_FIRST + 5 }, { "sound", MENU_SOUND }, { "key-click", MENU_KEY_CLICK },
         { "next-layout", MENU_LAYOUT_NEXT }, { "scratches", MENU_SCRATCHES }, { "wear", MENU_WEAR }, { "touchscreen", MENU_TOUCHSCREEN },
@@ -172,7 +172,7 @@ static void usage() {
         "  --period            run the device at a period accurate 10 fps\n"
         "  --fps=N             device frame rate, 0 for unlimited (default 0)\n"
         "  --response=N        LCD response time scale, 0 instant, 1 normal, 4 very slow\n"
-        "  --menu=ITEMS        trigger menu items after boot: reload, interrupt, initialize, show-repl,\n"
+        "  --menu=ITEMS        trigger menu items after boot: reload, interrupt, initialize, test-mode, show-repl,\n"
         "                      focus-repl, backlight, dead-columns, sound, key-click, period,\n"
         "                      show-keys\n"
         "  --keys=SEQUENCE     type into the device after boot, {DOWN} {ENTER} {F1}, {+LEFT} holds, {-LEFT} releases\n"
@@ -657,6 +657,7 @@ int main(int argc, char **argv) {
                 case MENU_RELOAD:       runtime_request_reload(); break;
                 case MENU_INTERRUPT:    runtime_interrupt(); break;
                 case MENU_INITIALIZE:   runtime_initialize_memory(); break;
+                case MENU_TEST_MODE:    runtime_enter_test_mode(); break;
                 case MENU_INSTALL_WZD: {
                     static const SDL_DialogFileFilter filters[] = { { "Sharp organizer programs", "wzd" } };
                     SDL_ShowOpenFileDialog(install_chosen, nullptr, window, filters, 1, options.apps.c_str(), true);

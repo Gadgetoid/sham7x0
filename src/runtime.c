@@ -344,13 +344,13 @@ static void present_screen(void) {
     }
 }
 
-void runtime_initialize_memory(void) {
+static void reset_holding(uint16_t first, uint16_t second, const char *notice) {
     machine_release_keys(machine);
     queue_head = queue_tail = 0;
     step_pressed = false;
     action_step = 0;
     key_action_t action = { .count = 0 };
-    add_step(&action, POWER_KEY_CODE, 0);
+    add_step(&action, first, second);
     active_step = action.steps[0];
     active_step.hold_ms = INIT_HOLD_MS;
     apply_step(&active_step, true);
@@ -358,7 +358,15 @@ void runtime_initialize_memory(void) {
     step_time_ms = 0;
     machine_reset(machine);
     boots++;
-    console_notice("reset with ON held");
+    console_notice(notice);
+}
+
+void runtime_initialize_memory(void) {
+    reset_holding(POWER_KEY_CODE, 0, "reset with ON held");
+}
+
+void runtime_enter_test_mode(void) {
+    reset_holding(FIRMWARE_ESC, 'd', "reset with ESC and D held: factory test mode");
 }
 
 static void save_state(void) {
@@ -444,6 +452,8 @@ static void run_command(const char *line) {
         console_notice("reset");
     } else if (strcmp(line, "init") == 0) {
         runtime_initialize_memory();
+    } else if (strcmp(line, "testmode") == 0) {
+        runtime_enter_test_mode();
     } else if (strcmp(line, "on") == 0) {
         enqueue((host_key_t){ POWER_KEY_CODE, 0 });
     } else if (strcmp(line, "pc") == 0) {
@@ -457,7 +467,7 @@ static void run_command(const char *line) {
     } else if (strcmp(line, "trace on") == 0 || strcmp(line, "trace off") == 0) {
         machine_set_trace_ports(machine, strcmp(line, "trace on") == 0);
     } else {
-        console_notice("commands: reset, init (reset holding ON), on, install PATH, save, pc, trace on, trace off");
+        console_notice("commands: reset, init (reset holding ON), testmode (reset holding ESC+D), on, install PATH, save, pc, trace on, trace off");
     }
 }
 
