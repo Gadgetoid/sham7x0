@@ -8,7 +8,6 @@
 #include "imgui.h"
 #include "console.h"
 
-extern "C" bool mp_repl_continue_with_input(const char *input);
 
 namespace {
 
@@ -24,7 +23,6 @@ const size_t MAX_LINES = 5000;
 std::vector<Line> lines;
 bool line_open = false;
 std::deque<std::string> pending;
-std::string block;
 std::vector<std::string> history;
 int history_pos = -1;
 char input[1024] = "";
@@ -45,7 +43,7 @@ void add_line(const std::string &text, LineKind kind) {
 }
 
 const char *prompt() {
-    return block.empty() ? ">>> " : "... ";
+    return "> ";
 }
 
 int input_callback(ImGuiInputTextCallbackData *data) {
@@ -104,12 +102,8 @@ extern "C" void console_submit(const char *line) {
         if (history.empty() || history.back() != line) history.push_back(line);
     }
     history_pos = -1;
-    if (!block.empty()) block += "\n";
-    block += line;
-    if (mp_repl_continue_with_input(block.c_str())) return;
-    bool blank = block.find_first_not_of(" \t\n") == std::string::npos;
-    if (!blank) pending.push_back(block);
-    block.clear();
+    std::string command = line;
+    if (command.find_first_not_of(" \t\n") != std::string::npos) pending.push_back(command);
 }
 
 extern "C" char *console_take_input(void) {
@@ -126,7 +120,6 @@ void console_focus(void) {
 void console_cancel(void) {
     add_line(std::string(prompt()) + input + "^C", ECHO);
     input[0] = '\0';
-    block.clear();
 }
 
 void console_draw(void) {
@@ -157,7 +150,7 @@ void console_draw(void) {
     }
     ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_EscapeClearsAll |
                                 ImGuiInputTextFlags_CallbackHistory;
-    if (ImGui::InputText("##repl", input, sizeof input, flags, input_callback)) {
+    if (ImGui::InputText("##console", input, sizeof input, flags, input_callback)) {
         console_submit(input);
         input[0] = '\0';
         ImGui::SetKeyboardFocusHere(-1);

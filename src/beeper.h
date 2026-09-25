@@ -12,8 +12,6 @@ void beeper_stop(void);
 bool beeper_busy(void);
 void beeper_set_sound(bool on);
 bool beeper_sound(void);
-void beeper_set_key_click(bool on);
-bool beeper_key_click(void);
 void beeper_deinit(void);
 
 #ifdef __cplusplus

@@ -73,8 +73,8 @@ void menu_install(void) {
     add_item(run, MENU_TEST_MODE, @"Factory Test Mode", @"", 0);
     add_item(run, MENU_INSTALL_WZD, @"Install .wzd…", @"i", NSEventModifierFlagCommand);
     [run addItem:[NSMenuItem separatorItem]];
-    add_item(run, MENU_SHOW_REPL, @"Show REPL", @"j", NSEventModifierFlagCommand);
-    add_item(run, MENU_FOCUS_REPL, @"Focus REPL", @"l", NSEventModifierFlagCommand);
+    add_item(run, MENU_SHOW_CONSOLE, @"Show Console", @"j", NSEventModifierFlagCommand);
+    add_item(run, MENU_FOCUS_CONSOLE, @"Focus Console", @"l", NSEventModifierFlagCommand);
 
     NSMenu *system = add_menu(@"System");
     NSMenu *layout = submenu(system, @"Layout");
@@ -92,7 +92,6 @@ void menu_install(void) {
     [system addItem:[NSMenuItem separatorItem]];
     add_item(system, MENU_BACKLIGHT, @"Backlight", @"b", NSEventModifierFlagCommand);
     add_item(system, MENU_SOUND, @"Sound", @"", 0);
-    add_item(system, MENU_KEY_CLICK, @"Key Click", @"", 0);
     [system addItem:[NSMenuItem separatorItem]];
     NSMenu *rate = submenu(system, @"Frame Rate");
     NSString *rates[] = { @"Unlimited", @"60 fps", @"30 fps", @"20 fps", @"15 fps", @"10 fps" };

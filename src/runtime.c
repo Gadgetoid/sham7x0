@@ -109,11 +109,6 @@ static uint64_t sound_cursor = 0;
 static float sound_frequency = 0;
 static machine_lcd_t shown_lcd = { true, DEFAULT_CONTRAST, false };
 
-bool mp_repl_continue_with_input(const char *input) {
-    (void)input;
-    return false;
-}
-
 static void log_to_console(const char *message) {
     console_notice(message);
 }
@@ -548,7 +543,7 @@ bool runtime_idle(void) {
     return machine && machine_halted(machine);
 }
 
-bool runtime_repl_busy(void) {
+bool runtime_console_busy(void) {
     return false;
 }
 

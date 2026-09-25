@@ -58,7 +58,7 @@ struct Options {
     int height = 900;
     bool dead_columns = false;
     bool fresh = false;
-    bool show_repl = true;
+    bool show_console = true;
     bool show_keys = true;
     bool show_keyboard = true;
     int layout = -1;
@@ -73,7 +73,7 @@ struct Options {
 };
 
 struct Settings {
-    bool show_repl;
+    bool show_console;
     int layout;
     bool backlight;
     bool dead_columns;
@@ -86,7 +86,7 @@ struct Settings {
     int height;
 
     bool operator==(const Settings &other) const {
-        return show_repl == other.show_repl && layout == other.layout && backlight == other.backlight &&
+        return show_console == other.show_console && layout == other.layout && backlight == other.backlight &&
                dead_columns == other.dead_columns && scratches == other.scratches && wear == other.wear && touchscreen == other.touchscreen && fps == other.fps && response == other.response &&
                width == other.width && height == other.height;
     }
@@ -103,7 +103,7 @@ static void load_settings(const std::string &data, Options &options) {
     char value[64];
     while (fscanf(file, " %63[^=]=%63s", key, value) == 2) {
         std::string name = key;
-        if (name == "show_repl") options.show_repl = atoi(value) != 0;
+        if (name == "show_console" || name == "show_console") options.show_console = atoi(value) != 0;
         else if (name == "show_keys") options.show_keys = atoi(value) != 0;
         else if (name == "show_keyboard") options.show_keyboard = atoi(value) != 0;
         else if (name == "layout") options.layout = atoi(value);
@@ -125,8 +125,8 @@ static void save_settings(const std::string &data, const Settings &settings) {
     std::string temporary = path + ".tmp";
     FILE *file = fopen(temporary.c_str(), "w");
     if (!file) return;
-    fprintf(file, "show_repl=%d\nlayout=%d\nbacklight=%d\ndead_columns=%d\nscratches=%d\nwear=%d\ntouchscreen=%d\nfps=%d\nresponse=%g\nwidth=%d\nheight=%d\n",
-            settings.show_repl, settings.layout, settings.backlight, settings.dead_columns, settings.scratches, settings.wear, settings.touchscreen, settings.fps,
+    fprintf(file, "show_console=%d\nlayout=%d\nbacklight=%d\ndead_columns=%d\nscratches=%d\nwear=%d\ntouchscreen=%d\nfps=%d\nresponse=%g\nwidth=%d\nheight=%d\n",
+            settings.show_console, settings.layout, settings.backlight, settings.dead_columns, settings.scratches, settings.wear, settings.touchscreen, settings.fps,
             settings.response, settings.width, settings.height);
     fclose(file);
     rename(temporary.c_str(), path.c_str());
@@ -142,9 +142,9 @@ static std::string data_argument(int argc, char **argv) {
 
 static int menu_item_named(const std::string &name) {
     static const std::pair<const char *, int> names[] = {
-        { "reload", MENU_RELOAD }, { "interrupt", MENU_INTERRUPT }, { "initialize", MENU_INITIALIZE }, { "test-mode", MENU_TEST_MODE }, { "show-repl", MENU_SHOW_REPL },
-        { "focus-repl", MENU_FOCUS_REPL }, { "backlight", MENU_BACKLIGHT }, { "dead-columns", MENU_DEAD_COLUMNS },
-        { "period", MENU_FPS_FIRST + 5 }, { "sound", MENU_SOUND }, { "key-click", MENU_KEY_CLICK },
+        { "reload", MENU_RELOAD }, { "interrupt", MENU_INTERRUPT }, { "initialize", MENU_INITIALIZE }, { "test-mode", MENU_TEST_MODE }, { "show-console", MENU_SHOW_CONSOLE },
+        { "focus-console", MENU_FOCUS_CONSOLE }, { "backlight", MENU_BACKLIGHT }, { "dead-columns", MENU_DEAD_COLUMNS },
+        { "period", MENU_FPS_FIRST + 5 }, { "sound", MENU_SOUND },
         { "next-layout", MENU_LAYOUT_NEXT }, { "scratches", MENU_SCRATCHES }, { "wear", MENU_WEAR }, { "touchscreen", MENU_TOUCHSCREEN },
     };
     for (auto &entry : names) {
@@ -163,7 +163,7 @@ static void usage() {
         "  --install=FILE      install a .wzd program after boot, repeatable\n"
         "  --size=WxH          window size (default 1400x900)\n"
         "  --dead-columns      simulate failed LCD column drivers\n"
-        "  --no-repl           start with the REPL hidden\n"
+        "  --no-console        start with the console hidden\n"
         "  --no-keys           start without the device keys around the screen\n"
         "  --no-keyboard       start without the keyboard\n"
         "  --layout=N          0 screen only, 1 screen & frame, 2 screen & buttons, 3 screen & keyboard\n"
@@ -172,11 +172,11 @@ static void usage() {
         "  --period            run the device at a period accurate 10 fps\n"
         "  --fps=N             device frame rate, 0 for unlimited (default 0)\n"
         "  --response=N        LCD response time scale, 0 instant, 1 normal, 4 very slow\n"
-        "  --menu=ITEMS        trigger menu items after boot: reload, interrupt, initialize, test-mode, show-repl,\n"
-        "                      focus-repl, backlight, dead-columns, sound, key-click, period,\n"
+        "  --menu=ITEMS        trigger menu items after boot: reload, interrupt, initialize, test-mode, show-console,\n"
+        "                      focus-console, backlight, dead-columns, sound, period,\n"
         "                      show-keys\n"
         "  --keys=SEQUENCE     type into the device after boot, {DOWN} {ENTER} {F1}, {+LEFT} holds, {-LEFT} releases\n"
-        "  --exec=COMMAND      run a console command after boot, repeatable (reset, init, on, pc)\n"
+        "  --exec=COMMAND      run a console command after boot, repeatable (type help in the console)\n"
         "  --screenshot=FILE   save the window as BMP after --frames and exit\n"
         "  --frames=N          frames before the screenshot (default 120)\n");
 }
@@ -206,7 +206,7 @@ static bool parse_options(int argc, char **argv, Options &options) {
         else if (const char *v = value("--size=")) sscanf(v, "%dx%d", &options.width, &options.height);
         else if (arg == "--dead-columns") options.dead_columns = true;
         else if (arg == "--fresh") options.fresh = true;
-        else if (arg == "--no-repl") options.show_repl = false;
+        else if (arg == "--no-console" || arg == "--no-repl") options.show_console = false;
         else if (arg == "--no-keys") options.layout = 1;
         else if (arg == "--no-keyboard") options.layout = 2;
         else if (arg == "--touchscreen") options.touchscreen = true;
@@ -493,7 +493,7 @@ struct KeyScript {
     }
 };
 
-static void set_repl_visible(SDL_Window *window, bool visible, const DeviceState &device, int &restore_height) {
+static void set_console_visible(SDL_Window *window, bool visible, const DeviceState &device, int &restore_height) {
     int width = 0, height = 0;
     SDL_GetWindowSize(window, &width, &height);
     int device_height = (int)device_fit_height((float)width, device);
@@ -599,11 +599,11 @@ int main(int argc, char **argv) {
     device.scratches = options.scratches;
     device.wear = options.wear;
     bool &device_focused = device.focused;
-    bool show_repl = options.show_repl;
+    bool show_console = options.show_console;
     Touchscreen touch;
     bool want_touchscreen = options.touchscreen;
     int restore_height = options.height;
-    if (!show_repl) set_repl_visible(window, false, device, restore_height);
+    if (!show_console) set_console_visible(window, false, device, restore_height);
     int fps = options.fps;
     float response = options.response;
     lcd_set_response(response);
@@ -621,7 +621,7 @@ int main(int argc, char **argv) {
                 SDL_Keycode key = event.key.key;
                 SDL_Keymod mod = event.key.mod;
                 if ((mod & SDL_KMOD_CTRL) && key == SDLK_C) {
-                    if (device_focused || runtime_repl_busy()) runtime_interrupt();
+                    if (device_focused || runtime_console_busy()) runtime_interrupt();
                     else console_cancel();
                     continue;
                 }
@@ -651,7 +651,7 @@ int main(int argc, char **argv) {
             if (item >= MENU_LAYOUT_FIRST && item < MENU_LAYOUT_END) {
                 layout = item - MENU_LAYOUT_FIRST;
                 apply_layout();
-                if (!show_repl) set_repl_visible(window, false, device, restore_height);
+                if (!show_console) set_console_visible(window, false, device, restore_height);
             }
             switch (item) {
                 case MENU_RELOAD:       runtime_request_reload(); break;
@@ -663,19 +663,18 @@ int main(int argc, char **argv) {
                     SDL_ShowOpenFileDialog(install_chosen, nullptr, window, filters, 1, options.apps.c_str(), true);
                     break;
                 }
-                case MENU_SHOW_REPL:
-                    show_repl = !show_repl;
-                    set_repl_visible(window, show_repl, device, restore_height);
+                case MENU_SHOW_CONSOLE:
+                    show_console = !show_console;
+                    set_console_visible(window, show_console, device, restore_height);
                     break;
-                case MENU_FOCUS_REPL:
-                    if (!show_repl) set_repl_visible(window, true, device, restore_height);
-                    show_repl = true;
+                case MENU_FOCUS_CONSOLE:
+                    if (!show_console) set_console_visible(window, true, device, restore_height);
+                    show_console = true;
                     console_focus();
                     break;
                 case MENU_BACKLIGHT:    lcd_set_backlight(!lcd_get_backlight()); break;
                 case MENU_DEAD_COLUMNS: lcd_set_dead_columns(!lcd_get_dead_columns()); break;
                 case MENU_SOUND:        beeper_set_sound(!beeper_sound()); break;
-                case MENU_KEY_CLICK:    beeper_set_key_click(!beeper_key_click()); break;
                 case MENU_SCRATCHES:    device.scratches = !device.scratches; break;
                 case MENU_WEAR:         device.wear = !device.wear; break;
                 case MENU_TOUCHSCREEN:
@@ -685,7 +684,7 @@ int main(int argc, char **argv) {
                 case MENU_LAYOUT_NEXT:
                     layout = (layout + 1) % 4;
                     apply_layout();
-                    if (!show_repl) set_repl_visible(window, false, device, restore_height);
+                    if (!show_console) set_console_visible(window, false, device, restore_height);
                     break;
                 default: break;
             }
@@ -695,9 +694,9 @@ int main(int argc, char **argv) {
             static bool have_saved = false;
             int window_w = 0, window_h = 0;
             SDL_GetWindowSize(window, &window_w, &window_h);
-            Settings current = { show_repl, layout, lcd_get_backlight(), lcd_get_dead_columns(), device.scratches, device.wear, want_touchscreen, fps, response,
+            Settings current = { show_console, layout, lcd_get_backlight(), lcd_get_dead_columns(), device.scratches, device.wear, want_touchscreen, fps, response,
                                  touch.active ? touch.windowed.w : window_w,
-                                 touch.active ? touch.windowed.h : show_repl ? window_h : restore_height };
+                                 touch.active ? touch.windowed.h : show_console ? window_h : restore_height };
             if (!have_saved) {
                 saved = current;
                 have_saved = true;
@@ -712,7 +711,7 @@ int main(int argc, char **argv) {
             pending_installs.clear();
         }
         menu_ensure();
-        menu_set_checked(MENU_SHOW_REPL, show_repl);
+        menu_set_checked(MENU_SHOW_CONSOLE, show_console);
         menu_set_checked(MENU_BACKLIGHT, lcd_get_backlight());
         menu_set_checked(MENU_DEAD_COLUMNS, lcd_get_dead_columns());
         for (int i = 0; i < MENU_FPS_END - MENU_FPS_FIRST; i++) menu_set_checked(MENU_FPS_FIRST + i, fps == MENU_FPS_VALUES[i]);
@@ -720,7 +719,6 @@ int main(int argc, char **argv) {
             menu_set_checked(MENU_RESPONSE_FIRST + i, response == MENU_RESPONSE_VALUES[i]);
         }
         menu_set_checked(MENU_SOUND, beeper_sound());
-        menu_set_checked(MENU_KEY_CLICK, beeper_key_click());
         for (int i = 0; i < MENU_LAYOUT_END - MENU_LAYOUT_FIRST; i++) menu_set_checked(MENU_LAYOUT_FIRST + i, layout == i);
         menu_set_checked(MENU_SCRATCHES, device.scratches);
         menu_set_checked(MENU_WEAR, device.wear);
@@ -763,12 +761,12 @@ int main(int argc, char **argv) {
 
         float total_height = ImGui::GetContentRegionAvail().y;
         float device_share = device.show_keys && device.show_keyboard ? 0.72f : 0.52f;
-        bool repl_visible = show_repl && !touch.active;
-        float device_height = repl_visible ? std::max(220.0f, total_height * device_share) : total_height;
+        bool console_visible = show_console && !touch.active;
+        float device_height = console_visible ? std::max(220.0f, total_height * device_share) : total_height;
         device_draw(renderer, io.DisplayFramebufferScale.x, device_height, compose_seconds, device);
 
-        if (repl_visible) {
-            ImGui::TextDisabled("%s", device_focused ? "keys -> device  (Cmd-L: REPL)" : "keys -> REPL  (Esc: device)");
+        if (console_visible) {
+            ImGui::TextDisabled("%s", device_focused ? "keys -> device  (Cmd-L: console)" : "keys -> console  (Esc: device)");
             ImGui::SameLine(ImGui::GetContentRegionMax().x - 200);
             if (fps > 0) {
                 ImGui::TextDisabled("%s  %.0f fps  LCD %d fps", runtime_idle() ? "idle" : "running", io.Framerate, fps);
