@@ -368,7 +368,19 @@ static void save_state(void) {
 
 static void load_state(void) {
     int64_t saved_at = 0;
-    if (!persist || !machine_load(machine, state_path, &saved_at)) return;
+    if (!persist) return;
+    if (!machine_load(machine, state_path, &saved_at)) {
+        FILE *existing = fopen(state_path, "rb");
+        if (!existing) return;
+        fclose(existing);
+        char backup[sizeof state_path + 8];
+        snprintf(backup, sizeof backup, "%s.old", state_path);
+        rename(state_path, backup);
+        char message[sizeof backup + 80];
+        snprintf(message, sizeof message, "saved state is from an older version, kept as %s and starting fresh", backup);
+        console_notice(message);
+        return;
+    }
     int64_t away = (int64_t)time(NULL) - saved_at;
     if (away > MAX_CLOCK_CATCH_UP) away = MAX_CLOCK_CATCH_UP;
     if (away > 0) machine_advance_clock(machine, away);
