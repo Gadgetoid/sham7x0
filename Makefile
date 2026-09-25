@@ -66,10 +66,13 @@ run: $(PROG)
 screenshot: $(PROG)
 	./$(PROG) --rom=$(ROM) --screenshot=$(BUILD)/screenshot.bmp
 
+test: headless
+	python3 tools/test.py
+
 keyboard:
 	python3 tools/make_keyboard.py tools/keyboard_layout.json src/keyboard_layout.h
 
 clean:
 	rm -rf $(BUILD) $(PROG) headless
 
-.PHONY: run screenshot keyboard clean
+.PHONY: run screenshot test keyboard clean

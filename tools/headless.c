@@ -78,6 +78,8 @@ static int parse_keys(const char *spec, key_event_t *events, int capacity) {
 int main(int argc, char **argv) {
     const char *rom_path = NULL;
     const char *pbm_path = NULL;
+    const char *load_path = NULL;
+    const char *save_path = NULL;
     double seconds = 3;
     bool trace_ports = false;
     double profile_from = -1;
@@ -89,6 +91,8 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (strncmp(argv[i], "--seconds=", 10) == 0) seconds = atof(argv[i] + 10);
         else if (strncmp(argv[i], "--pbm=", 6) == 0) pbm_path = argv[i] + 6;
+        else if (strncmp(argv[i], "--load=", 7) == 0) load_path = argv[i] + 7;
+        else if (strncmp(argv[i], "--save=", 7) == 0) save_path = argv[i] + 7;
         else if (strncmp(argv[i], "--keys=", 7) == 0) event_count = parse_keys(argv[i] + 7, events, 64);
         else if (strcmp(argv[i], "--trace-ports") == 0) trace_ports = true;
         else if (strncmp(argv[i], "--profile=", 10) == 0) profile_from = atof(argv[i] + 10);
@@ -97,7 +101,7 @@ int main(int argc, char **argv) {
         else rom_path = argv[i];
     }
     if (!rom_path) {
-        fprintf(stderr, "usage: headless ROM [--seconds=N] [--pbm=FILE] [--trace-ports] [--keys=T:COL.ROW/HOLD,...]\n");
+        fprintf(stderr, "usage: headless ROM [--seconds=N] [--pbm=FILE] [--load=STATE] [--save=STATE] [--trace-ports] [--keys=T:COL.ROW/HOLD,...]\n");
         return 1;
     }
     size_t size = 0;
@@ -107,6 +111,11 @@ int main(int argc, char **argv) {
         return 1;
     }
     machine_t *machine = machine_create(image, size);
+    int64_t saved_at = 0;
+    if (load_path && !machine_load(machine, load_path, &saved_at)) {
+        fprintf(stderr, "cannot load state %s\n", load_path);
+        return 1;
+    }
     machine_set_trace_ports(machine, trace_ports);
     machine_set_watch_pc(machine, watch_pc);
     const int slices_per_second = 100;
@@ -156,6 +165,10 @@ int main(int argc, char **argv) {
     if (dump_page >= 0 && machine_read_page(machine, (uint16_t)dump_page, page_copy, sizeof page_copy)) screen = page_copy;
     print_screen(screen);
     if (pbm_path) save_pbm(screen, pbm_path);
+    if (save_path && !machine_save(machine, save_path, 0)) {
+        fprintf(stderr, "cannot save state %s\n", save_path);
+        return 1;
+    }
     machine_destroy(machine);
     free(image);
     return 0;
