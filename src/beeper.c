@@ -6,9 +6,9 @@
 #define SAMPLE_RATE 44100
 #define QUEUE_SIZE  256
 #define CHUNK       512
-#define VOLUME      0.16f
-#define PIEZO_HZ    3000.0f
-#define PIEZO_Q     1.0f
+#define VOLUME      0.20f
+#define PIEZO_HZ    4000.0f
+#define PIEZO_Q     1.4f
 #define ATTACK_MS   1.0f
 #define RELEASE_MS  3.0f
 #define SILENCE     1e-6f
