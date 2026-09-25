@@ -41,6 +41,7 @@
 #define AUTOSAVE_MS        60000
 #define MAX_CLOCK_CATCH_UP (400LL * 24 * 60 * 60)
 #define DEFAULT_CONTRAST   32
+#define AUDIO_LATENCY_MS   40
 
 typedef struct {
     uint16_t codes[MAX_STEP_KEYS];
@@ -391,7 +392,11 @@ static void queue_sound(float frequency, uint64_t until) {
     uint64_t cycles_per_ms = MACHINE_CLOCK_HZ / 1000;
     uint64_t whole_ms = (until - sound_cursor) / cycles_per_ms;
     if (whole_ms == 0) return;
-    if (beeper_sound() && (frequency > 0 || beeper_busy())) beeper_tone(frequency, 0, (uint32_t)whole_ms);
+    if (beeper_sound()) {
+        bool busy = beeper_busy();
+        if (frequency > 0 && !busy) beeper_tone(0, 0, AUDIO_LATENCY_MS);
+        if (frequency > 0 || busy) beeper_tone(frequency, 0, (uint32_t)whole_ms);
+    }
     sound_cursor += whole_ms * cycles_per_ms;
 }
 
