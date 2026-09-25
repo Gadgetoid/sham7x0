@@ -16,10 +16,11 @@
 #define RAM_PAGES            64
 #define LCD_CONTROL_PAGE     0x300
 #define FIXED_RAM_BASE       0xc000
-#define FIXED_RAM_SIZE       0x4000
+#define FIXED_RAM_FIRST_PAGE 0x402
 #define TICK_HZ              64
 
 #define INTERRUPT_KEYBOARD   0x01
+#define INTERRUPT_SECOND     0x10
 #define INTERRUPT_TICK       0x20
 #define INTERRUPT_POWER_KEY  0x80
 #define POWER_KEY_BIT        0x10
@@ -48,7 +49,6 @@ struct machine {
     z80      cpu;
     uint8_t *flash;
     uint8_t *ram;
-    uint8_t  fixed_ram[FIXED_RAM_SIZE];
     flash_state_t flash_state;
     uint16_t low_window_page;
     uint16_t high_window_page;
@@ -68,6 +68,8 @@ struct machine {
     uint8_t  screen[MACHINE_SCREEN_ROW_BYTES * MACHINE_SCREEN_HEIGHT];
     machine_log_fn log;
     uint32_t *pc_histogram;
+    int watch_pc;
+    int watch_hits;
 };
 
 static void machine_log(machine_t *machine, const char *format, ...) {
@@ -93,6 +95,7 @@ static bool page_is_ram(uint16_t page) {
 }
 
 static uint16_t window_page(machine_t *machine, uint16_t address) {
+    if (address >= FIXED_RAM_BASE) return (uint16_t)(FIXED_RAM_FIRST_PAGE + ((address - FIXED_RAM_BASE) >> 13));
     if (address < 0xa000) return (uint16_t)(machine->low_window_page + 4);
     return machine->high_window_page;
 }
@@ -145,22 +148,18 @@ static void flash_write(machine_t *machine, uint32_t offset, uint8_t value) {
 static uint8_t read_byte(void *userdata, uint16_t address) {
     machine_t *machine = userdata;
     if (address < 0x8000) return machine->flash[address];
-    if (address >= FIXED_RAM_BASE) return machine->fixed_ram[address - FIXED_RAM_BASE];
     uint16_t page = window_page(machine, address);
     if (page < FLASH_PAGES) return flash_read(machine, flash_address(page, address));
     uint8_t *memory = page_pointer(machine, page);
     if (memory) return memory[address & (PAGE_SIZE - 1)];
     if (page == LCD_CONTROL_PAGE) return (address & 1) ? machine->lcd_control >> 8 : machine->lcd_control & 0xff;
+    if (machine->trace_ports) machine_log(machine, "unmapped read page %03x addr %04x pc %04x", page, address, machine->cpu.pc);
     return 0xff;
 }
 
 static void write_byte(void *userdata, uint16_t address, uint8_t value) {
     machine_t *machine = userdata;
     if (address < 0x8000) return;
-    if (address >= FIXED_RAM_BASE) {
-        machine->fixed_ram[address - FIXED_RAM_BASE] = value;
-        return;
-    }
     uint16_t page = window_page(machine, address);
     if (page < FLASH_PAGES) {
         flash_write(machine, flash_address(page, address), value);
@@ -360,6 +359,11 @@ void machine_run(machine_t *machine, uint32_t cycles) {
         unsigned long before = machine->cpu.cyc;
         update_interrupt_line(machine);
         if (machine->pc_histogram) machine->pc_histogram[machine->cpu.pc]++;
+        if (machine->cpu.pc == machine->watch_pc && machine->watch_hits < 8) {
+            machine->watch_hits++;
+            machine_log(machine, "watch pc %04x low page %03x high page %03x sp %04x", machine->cpu.pc, machine->low_window_page,
+                        machine->high_window_page, machine->cpu.sp);
+        }
         z80_step(&machine->cpu);
         uint32_t elapsed = (uint32_t)(machine->cpu.cyc - before);
         machine->cycles_into_tick += elapsed;
@@ -371,6 +375,7 @@ void machine_run(machine_t *machine, uint32_t cycles) {
         if (machine->rtc.cycles_into_second >= MACHINE_CLOCK_HZ) {
             machine->rtc.cycles_into_second -= MACHINE_CLOCK_HZ;
             rtc_advance_second(&machine->rtc);
+            machine->interrupt_status |= INTERRUPT_SECOND;
         }
     }
 }
@@ -425,4 +430,16 @@ void machine_set_trace_ports(machine_t *machine, bool trace) {
 
 void machine_set_pc_histogram(machine_t *machine, uint32_t *counts) {
     machine->pc_histogram = counts;
+}
+
+bool machine_read_page(machine_t *machine, uint16_t page, uint8_t *out, size_t length) {
+    uint8_t *memory = page_pointer(machine, page);
+    if (!memory) return false;
+    memcpy(out, memory, length < PAGE_SIZE ? length : PAGE_SIZE);
+    return true;
+}
+
+void machine_set_watch_pc(machine_t *machine, int pc) {
+    machine->watch_pc = pc;
+    machine->watch_hits = 0;
 }

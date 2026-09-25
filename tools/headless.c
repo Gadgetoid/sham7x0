@@ -81,6 +81,8 @@ int main(int argc, char **argv) {
     double seconds = 3;
     bool trace_ports = false;
     double profile_from = -1;
+    int dump_page = -1;
+    int watch_pc = -1;
     static uint32_t histogram[65536];
     key_event_t events[64];
     int event_count = 0;
@@ -90,6 +92,8 @@ int main(int argc, char **argv) {
         else if (strncmp(argv[i], "--keys=", 7) == 0) event_count = parse_keys(argv[i] + 7, events, 64);
         else if (strcmp(argv[i], "--trace-ports") == 0) trace_ports = true;
         else if (strncmp(argv[i], "--profile=", 10) == 0) profile_from = atof(argv[i] + 10);
+        else if (strncmp(argv[i], "--watch=", 8) == 0) watch_pc = (int)strtol(argv[i] + 8, NULL, 0);
+        else if (strncmp(argv[i], "--page=", 7) == 0) dump_page = (int)strtol(argv[i] + 7, NULL, 0);
         else rom_path = argv[i];
     }
     if (!rom_path) {
@@ -104,6 +108,7 @@ int main(int argc, char **argv) {
     }
     machine_t *machine = machine_create(image, size);
     machine_set_trace_ports(machine, trace_ports);
+    machine_set_watch_pc(machine, watch_pc);
     const int slices_per_second = 100;
     int total_slices = (int)(seconds * slices_per_second);
     for (int slice = 0; slice < total_slices; slice++) {
@@ -141,6 +146,8 @@ int main(int argc, char **argv) {
         }
     }
     const uint8_t *screen = machine_screen(machine);
+    static uint8_t page_copy[MACHINE_SCREEN_ROW_BYTES * MACHINE_SCREEN_HEIGHT];
+    if (dump_page >= 0 && machine_read_page(machine, (uint16_t)dump_page, page_copy, sizeof page_copy)) screen = page_copy;
     print_screen(screen);
     if (pbm_path) save_pbm(screen, pbm_path);
     machine_destroy(machine);
