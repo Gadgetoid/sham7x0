@@ -251,8 +251,8 @@ static uint8_t keyboard_rows(machine_t *machine) {
 
 static void note_port(machine_t *machine, uint8_t port, bool write, uint8_t value) {
     if (machine->trace_ports || !machine->port_seen[port][write]) {
-        machine_log(machine, "%s port %02x %s %02x at pc %04x", machine->port_seen[port][write] ? "" : "new", port,
-                    write ? "<-" : "->", value, machine->cpu.pc);
+        machine_log(machine, "%s port %02x %s %02x at pc %04x t %.3f", machine->port_seen[port][write] ? "" : "new", port,
+                    write ? "<-" : "->", value, machine->cpu.pc, (double)machine->cpu.cyc / MACHINE_CLOCK_HZ);
         machine->port_seen[port][write] = true;
     }
 }
@@ -440,9 +440,9 @@ void machine_run(machine_t *machine, uint32_t cycles) {
         unsigned long before = machine->cpu.cyc;
         update_interrupt_line(machine);
         if (machine->pc_histogram) machine->pc_histogram[machine->cpu.pc]++;
-        if (machine->cpu.pc == machine->watch_pc && machine->watch_hits < 8) {
+        if (machine->cpu.pc == machine->watch_pc && machine->watch_hits < 5000) {
             machine->watch_hits++;
-            machine_log(machine, "watch pc %04x low page %03x high page %03x bc %02x%02x hl %02x%02x de %02x%02x sp %04x", machine->cpu.pc, machine->low_window_page,
+            machine_log(machine, "watch %.2fs pc %04x low page %03x high page %03x bc %02x%02x hl %02x%02x de %02x%02x sp %04x", (double)machine->cpu.cyc / MACHINE_CLOCK_HZ, machine->cpu.pc, machine->low_window_page,
                         machine->high_window_page, machine->cpu.b, machine->cpu.c, machine->cpu.h, machine->cpu.l, machine->cpu.d, machine->cpu.e, machine->cpu.sp);
         }
         z80_step(&machine->cpu);

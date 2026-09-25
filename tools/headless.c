@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     int dump_address = -1, dump_length = 0;
     const char *dump_path = NULL;
     static uint32_t histogram[65536];
-    key_event_t events[64];
+    static key_event_t events[1024];
     int event_count = 0;
     for (int i = 1; i < argc; i++) {
         if (strncmp(argv[i], "--seconds=", 10) == 0) seconds = atof(argv[i] + 10);
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
         else if (strncmp(argv[i], "--load=", 7) == 0) load_path = argv[i] + 7;
         else if (strncmp(argv[i], "--save=", 7) == 0) save_path = argv[i] + 7;
         else if (strncmp(argv[i], "--install=", 10) == 0 && install_count < MACHINE_ADDIN_SLOTS) install_paths[install_count++] = argv[i] + 10;
-        else if (strncmp(argv[i], "--keys=", 7) == 0) event_count = parse_keys(argv[i] + 7, events, 64);
+        else if (strncmp(argv[i], "--keys=", 7) == 0) event_count = parse_keys(argv[i] + 7, events, 1024);
         else if (strcmp(argv[i], "--trace-ports") == 0) trace_ports = true;
         else if (strncmp(argv[i], "--profile=", 10) == 0) profile_from = atof(argv[i] + 10);
         else if (strncmp(argv[i], "--dump=", 7) == 0) {
