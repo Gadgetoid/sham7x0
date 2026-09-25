@@ -11,9 +11,13 @@
 #define FLASH_SIZE           0x400000
 #define FLASH_BLOCK_SIZE     0x10000
 #define FLASH_FIRST_DATA_PAGE 0x48
+#define FLASH_MANUFACTURER_ID 0x89
+#define FLASH_DEVICE_ID      0xa6
 #define FLASH_PAGES          (FLASH_SIZE / PAGE_SIZE)
 #define RAM_FIRST_PAGE       0x400
-#define RAM_PAGES            64
+#define RAM_CHIP_PAGES       16
+#define RAM_SECOND_CHIP_PAGE 0x500
+#define RAM_PAGES            (RAM_CHIP_PAGES * 2)
 #define LCD_CONTROL_PAGE     0x300
 #define FIXED_RAM_BASE       0xc000
 #define FIXED_RAM_FIRST_PAGE 0x402
@@ -27,7 +31,7 @@
 #define STATUS_INPUTS        0xe8
 #define SOUND_QUEUE_SIZE     256
 #define SOUND_BASE_HZ        16384.0f
-#define SNAPSHOT_MAGIC       "ZQ77XSNAP2"
+#define SNAPSHOT_MAGIC       "ZQ77XSNAP3"
 
 typedef enum {
     FLASH_READ_ARRAY,
@@ -35,6 +39,7 @@ typedef enum {
     FLASH_READ_ID,
     FLASH_PROGRAM_SETUP,
     FLASH_ERASE_SETUP,
+    FLASH_LOCK_SETUP,
 } flash_mode_t;
 
 typedef struct {
@@ -107,16 +112,23 @@ static void machine_log(machine_t *machine, const char *format, ...) {
     else fprintf(stderr, "%s\n", message);
 }
 
+static int ram_index(uint16_t page) {
+    if (page >= RAM_FIRST_PAGE && page < RAM_FIRST_PAGE + RAM_CHIP_PAGES) return page - RAM_FIRST_PAGE;
+    if (page >= RAM_SECOND_CHIP_PAGE && page < RAM_SECOND_CHIP_PAGE + RAM_CHIP_PAGES) {
+        return RAM_CHIP_PAGES + page - RAM_SECOND_CHIP_PAGE;
+    }
+    return -1;
+}
+
 static uint8_t *page_pointer(machine_t *machine, uint16_t page) {
     if (page < FLASH_PAGES) return machine->flash + (size_t)page * PAGE_SIZE;
-    if (page >= RAM_FIRST_PAGE && page < RAM_FIRST_PAGE + RAM_PAGES) {
-        return machine->ram + (size_t)(page - RAM_FIRST_PAGE) * PAGE_SIZE;
-    }
+    int index = ram_index(page);
+    if (index >= 0) return machine->ram + (size_t)index * PAGE_SIZE;
     return NULL;
 }
 
 static bool page_is_ram(uint16_t page) {
-    return page >= RAM_FIRST_PAGE && page < RAM_FIRST_PAGE + RAM_PAGES;
+    return ram_index(page) >= 0;
 }
 
 static uint16_t window_page(machine_t *machine, uint16_t address) {
@@ -132,7 +144,10 @@ static uint32_t flash_address(uint16_t page, uint16_t address) {
 static uint8_t flash_read(machine_t *machine, uint32_t offset) {
     flash_state_t *flash = &machine->flash_state;
     if (flash->mode == FLASH_READ_ARRAY || offset / FLASH_BLOCK_SIZE != flash->block) return machine->flash[offset];
-    if (flash->mode == FLASH_READ_ID) return (offset & 1) ? 0x66 : 0xb0;
+    if (flash->mode == FLASH_READ_ID) {
+        static const uint8_t identifier[4] = { FLASH_MANUFACTURER_ID, FLASH_DEVICE_ID, 0x00, 0x00 };
+        return identifier[offset & 3];
+    }
     return flash->status;
 }
 
@@ -147,6 +162,7 @@ static void flash_write(machine_t *machine, uint32_t offset, uint8_t value) {
         return;
     }
     if (flash->mode == FLASH_ERASE_SETUP) {
+        if (machine->trace_ports) machine_log(machine, "flash erase %02x block %03x pc %04x", value, block, machine->cpu.pc);
         if (value == 0xd0 && offset >= (uint32_t)FLASH_FIRST_DATA_PAGE * PAGE_SIZE) {
             memset(machine->flash + (size_t)block * FLASH_BLOCK_SIZE, 0xff, FLASH_BLOCK_SIZE);
         }
@@ -155,6 +171,14 @@ static void flash_write(machine_t *machine, uint32_t offset, uint8_t value) {
         flash->status = 0x80;
         return;
     }
+    if (flash->mode == FLASH_LOCK_SETUP) {
+        if (machine->trace_ports) machine_log(machine, "flash lock %02x block %03x pc %04x", value, block, machine->cpu.pc);
+        flash->mode = FLASH_READ_STATUS;
+        flash->block = block;
+        flash->status = 0x80;
+        return;
+    }
+    if (machine->trace_ports) machine_log(machine, "flash command %02x at %06x pc %04x", value, offset, machine->cpu.pc);
     flash->block = block;
     switch (value) {
         case 0xff: flash->mode = FLASH_READ_ARRAY; break;
@@ -164,6 +188,7 @@ static void flash_write(machine_t *machine, uint32_t offset, uint8_t value) {
         case 0x10:
         case 0x40: flash->mode = FLASH_PROGRAM_SETUP; break;
         case 0x20: flash->mode = FLASH_ERASE_SETUP; break;
+        case 0x60: flash->mode = FLASH_LOCK_SETUP; break;
         default:
             machine_log(machine, "flash command %02x at %06x pc %04x", value, offset, machine->cpu.pc);
             break;
@@ -172,7 +197,7 @@ static void flash_write(machine_t *machine, uint32_t offset, uint8_t value) {
 
 static uint8_t read_byte(void *userdata, uint16_t address) {
     machine_t *machine = userdata;
-    if (address < 0x8000) return machine->flash[address];
+    if (address < 0x8000) return flash_read(machine, address);
     uint16_t page = window_page(machine, address);
     if (page < FLASH_PAGES) return flash_read(machine, flash_address(page, address));
     uint8_t *memory = page_pointer(machine, page);
@@ -184,7 +209,11 @@ static uint8_t read_byte(void *userdata, uint16_t address) {
 
 static void write_byte(void *userdata, uint16_t address, uint8_t value) {
     machine_t *machine = userdata;
-    if (address < 0x8000) return;
+    if (address < 0x8000) {
+        if (machine->trace_ports) machine_log(machine, "fixed flash write %04x <- %02x pc %04x low %03x high %03x", address, value, machine->cpu.pc, machine->low_window_page, machine->high_window_page);
+        flash_write(machine, address, value);
+        return;
+    }
     uint16_t page = window_page(machine, address);
     if (page < FLASH_PAGES) {
         flash_write(machine, flash_address(page, address), value);
@@ -406,8 +435,8 @@ void machine_run(machine_t *machine, uint32_t cycles) {
         if (machine->pc_histogram) machine->pc_histogram[machine->cpu.pc]++;
         if (machine->cpu.pc == machine->watch_pc && machine->watch_hits < 8) {
             machine->watch_hits++;
-            machine_log(machine, "watch pc %04x low page %03x high page %03x sp %04x", machine->cpu.pc, machine->low_window_page,
-                        machine->high_window_page, machine->cpu.sp);
+            machine_log(machine, "watch pc %04x low page %03x high page %03x bc %02x%02x hl %02x%02x de %02x%02x sp %04x", machine->cpu.pc, machine->low_window_page,
+                        machine->high_window_page, machine->cpu.b, machine->cpu.c, machine->cpu.h, machine->cpu.l, machine->cpu.d, machine->cpu.e, machine->cpu.sp);
         }
         z80_step(&machine->cpu);
         uint32_t elapsed = (uint32_t)(machine->cpu.cyc - before);
@@ -595,4 +624,8 @@ bool machine_read_page(machine_t *machine, uint16_t page, uint8_t *out, size_t l
 void machine_set_watch_pc(machine_t *machine, int pc) {
     machine->watch_pc = pc;
     machine->watch_hits = 0;
+}
+
+uint8_t machine_peek(machine_t *machine, uint16_t address) {
+    return read_byte(machine, address);
 }

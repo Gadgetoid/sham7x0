@@ -50,6 +50,7 @@ void           machine_set_log(machine_t *machine, machine_log_fn log);
 void           machine_set_trace_ports(machine_t *machine, bool trace);
 void           machine_set_pc_histogram(machine_t *machine, uint32_t *counts);
 void           machine_set_watch_pc(machine_t *machine, int pc);
+uint8_t        machine_peek(machine_t *machine, uint16_t address);
 bool           machine_read_page(machine_t *machine, uint16_t page, uint8_t *out, size_t length);
 
 #ifdef __cplusplus

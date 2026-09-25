@@ -1,5 +1,6 @@
 uninitialized e85b88eb1f042764992fdaccc642bd17
 init_prompt 39a93dbc69ef7c11b63ce7452af11d97
+test_mode b650f425e5b68b56c55d4497224b166c
 welcome 6ccf31a6cc3a076fbc0435fc2a81bae8
 main_menu a5100766e310a58145577ffe45458cb0
 calendar 01ff9d3dc6e441598efebff244a05dd9

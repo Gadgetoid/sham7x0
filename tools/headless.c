@@ -85,6 +85,8 @@ int main(int argc, char **argv) {
     double profile_from = -1;
     int dump_page = -1;
     int watch_pc = -1;
+    int dump_address = -1, dump_length = 0;
+    const char *dump_path = NULL;
     static uint32_t histogram[65536];
     key_event_t events[64];
     int event_count = 0;
@@ -96,6 +98,10 @@ int main(int argc, char **argv) {
         else if (strncmp(argv[i], "--keys=", 7) == 0) event_count = parse_keys(argv[i] + 7, events, 64);
         else if (strcmp(argv[i], "--trace-ports") == 0) trace_ports = true;
         else if (strncmp(argv[i], "--profile=", 10) == 0) profile_from = atof(argv[i] + 10);
+        else if (strncmp(argv[i], "--dump=", 7) == 0) {
+            char path[512];
+            if (sscanf(argv[i] + 7, "%i:%i:%511s", &dump_address, &dump_length, path) == 3) dump_path = strdup(path);
+        }
         else if (strncmp(argv[i], "--watch=", 8) == 0) watch_pc = (int)strtol(argv[i] + 8, NULL, 0);
         else if (strncmp(argv[i], "--page=", 7) == 0) dump_page = (int)strtol(argv[i] + 7, NULL, 0);
         else rom_path = argv[i];
@@ -157,6 +163,11 @@ int main(int argc, char **argv) {
                 run_start = -1;
             }
         }
+    }
+    if (dump_path) {
+        FILE *dump = fopen(dump_path, "wb");
+        for (int offset = 0; dump && offset < dump_length; offset++) fputc(machine_peek(machine, (uint16_t)(dump_address + offset)), dump);
+        if (dump) fclose(dump);
     }
     machine_lcd_t lcd = machine_lcd(machine);
     fprintf(stderr, "lcd on %d contrast %d backlight %d\n", lcd.on, lcd.contrast, lcd.backlight);

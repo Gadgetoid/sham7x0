@@ -21,11 +21,13 @@ SHIFT = "0.5"
 KEY_1 = "1.0"
 KEY_H = "1.3"
 KEY_I = "3.2"
+KEY_D = "2.4"
 BACKLIGHT = "9.6"
 
 CASES = [
     {"name": "uninitialized", "seconds": 2, "keys": []},
     {"name": "init_prompt", "seconds": 2, "keys": [(0, POWER, 1.5)]},
+    {"name": "test_mode", "seconds": 3, "keys": [(0, ESC, 1.2), (0, KEY_D, 1.2)]},
     {"name": "welcome", "seconds": 10, "keys": [(0, POWER, 1.5), (2, ENTER, 0.3)]},
     {"name": "main_menu", "seconds": 15, "keys": [(0, POWER, 1.5), (2, ENTER, 0.3), (11, ESC, 0.3)], "save": "main"},
     {"name": "calendar", "load": "main", "seconds": 2, "keys": [(0.5, KEY_1, 0.2)]},
