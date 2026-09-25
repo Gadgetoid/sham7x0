@@ -882,7 +882,7 @@ void draw_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImVec2 d
         draw_recess(draw, circle(menu_centre, (fit_menu[2] + WELL_MARGIN + 2.5f) * u), KEY_WELL, u);
         Shape shape = circle(menu_centre, fit_menu[2] * u);
         bool pressed;
-        if (hit("key-menu", shape, pressed) && live) keys_push(HOST_KEY_TAB, 0);
+        if (hit("key-menu", shape, pressed) && live) keys_push(HOST_KEY_TAB, HOST_MOD_LID);
         draw_key(draw, shape, DARK_DOMED_KEY, pressed, u);
     }
 
@@ -918,14 +918,14 @@ void draw_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImVec2 d
     {
         Shape shape = circle(esc_centre, fit_esc[2] * u);
         bool pressed;
-        if (hit("key-esc", shape, pressed) && live) keys_push(HOST_KEY_ESC, 0);
+        if (hit("key-esc", shape, pressed) && live) keys_push(HOST_KEY_ESC, HOST_MOD_LID);
         draw_key(draw, shape, DARK_KEY, pressed, u);
         centred_text(draw, esc_centre + dip(pressed), 15.0f * u, LABEL, "ESC");
     }
     {
         Shape shape = circle(enter_centre, fit_enter[2] * u);
         bool pressed;
-        if (hit("key-enter", shape, pressed) && live) keys_push(HOST_KEY_ENTER, 0);
+        if (hit("key-enter", shape, pressed) && live) keys_push(HOST_KEY_ENTER, HOST_MOD_LID);
         draw_key(draw, shape, DARK_KEY, pressed, u);
         centred_text(draw, enter_centre + dip(pressed), 16.0f * u, LABEL, "ENTER");
     }

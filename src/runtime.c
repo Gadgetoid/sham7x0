@@ -26,6 +26,9 @@
 #define FIRMWARE_RIGHT     0x8043
 #define FIRMWARE_LID_UP    0x8044
 #define FIRMWARE_LID_DOWN  0x8045
+#define FIRMWARE_LID_MENU  0x8068
+#define FIRMWARE_LID_ESC   0x8067
+#define FIRMWARE_LID_ENTER 0x8066
 #define FIRMWARE_LIGHT     0x803b
 #define FIRMWARE_RETURN    0x000d
 #define FIRMWARE_SHIFT_RIGHT 0x8036
@@ -165,9 +168,9 @@ static uint16_t firmware_code(uint32_t code, uint8_t mods) {
     if (code >= '0' && code <= '9') return (uint16_t)code;
     if (code == ' ' || code == '-' || code == '.' || code == ',') return (uint16_t)code;
     switch (code) {
-        case HOST_KEY_ENTER:     return FIRMWARE_ENTER;
-        case HOST_KEY_ESC:       return FIRMWARE_ESC;
-        case HOST_KEY_TAB:       return FIRMWARE_MENU;
+        case HOST_KEY_ENTER:     return (mods & HOST_MOD_LID) ? FIRMWARE_LID_ENTER : FIRMWARE_ENTER;
+        case HOST_KEY_ESC:       return (mods & HOST_MOD_LID) ? FIRMWARE_LID_ESC : FIRMWARE_ESC;
+        case HOST_KEY_TAB:       return (mods & HOST_MOD_LID) ? FIRMWARE_LID_MENU : FIRMWARE_MENU;
         case HOST_KEY_NEW:       return FIRMWARE_NEW;
         case HOST_KEY_SMBL:      return FIRMWARE_SMBL;
         case HOST_KEY_BACKSPACE:
