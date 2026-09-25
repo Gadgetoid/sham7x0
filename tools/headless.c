@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "machine.h"
+#include "wzd.h"
 
 typedef struct {
     double at_seconds;
@@ -80,6 +81,8 @@ int main(int argc, char **argv) {
     const char *pbm_path = NULL;
     const char *load_path = NULL;
     const char *save_path = NULL;
+    const char *install_paths[MACHINE_ADDIN_SLOTS];
+    int install_count = 0;
     double seconds = 3;
     bool trace_ports = false;
     double profile_from = -1;
@@ -95,6 +98,7 @@ int main(int argc, char **argv) {
         else if (strncmp(argv[i], "--pbm=", 6) == 0) pbm_path = argv[i] + 6;
         else if (strncmp(argv[i], "--load=", 7) == 0) load_path = argv[i] + 7;
         else if (strncmp(argv[i], "--save=", 7) == 0) save_path = argv[i] + 7;
+        else if (strncmp(argv[i], "--install=", 10) == 0 && install_count < MACHINE_ADDIN_SLOTS) install_paths[install_count++] = argv[i] + 10;
         else if (strncmp(argv[i], "--keys=", 7) == 0) event_count = parse_keys(argv[i] + 7, events, 64);
         else if (strcmp(argv[i], "--trace-ports") == 0) trace_ports = true;
         else if (strncmp(argv[i], "--profile=", 10) == 0) profile_from = atof(argv[i] + 10);
@@ -121,6 +125,26 @@ int main(int argc, char **argv) {
     if (load_path && !machine_load(machine, load_path, &saved_at)) {
         fprintf(stderr, "cannot load state %s\n", load_path);
         return 1;
+    }
+    for (int i = 0; i < install_count; i++) {
+        size_t wzd_size = 0;
+        uint8_t *wzd_data = read_file(install_paths[i], &wzd_size);
+        static uint8_t slot_image[WZD_SLOT_SIZE];
+        wzd_program_t program;
+        char error[128] = "";
+        size_t slot_length = 0;
+        int slot = machine_free_addin_slot(machine);
+        if (!wzd_data) snprintf(error, sizeof error, "cannot read file");
+        else if (slot < 0) snprintf(error, sizeof error, "no free slot");
+        else if (wzd_parse(wzd_data, wzd_size, &program, error, sizeof error)) {
+            slot_length = wzd_build_slot(&program, slot, slot_image, error, sizeof error);
+        }
+        if (slot_length && machine_write_addin_slot(machine, slot, slot_image, slot_length)) {
+            fprintf(stderr, "installed %s in slot %d (%zu bytes)\n", program.title, slot, slot_length);
+        } else {
+            fprintf(stderr, "cannot install %s: %s\n", install_paths[i], error);
+        }
+        free(wzd_data);
     }
     machine_set_trace_ports(machine, trace_ports);
     machine_set_watch_pc(machine, watch_pc);

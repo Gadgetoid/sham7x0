@@ -13,6 +13,9 @@
 #define FLASH_FIRST_DATA_PAGE 0x48
 #define FLASH_MANUFACTURER_ID 0x89
 #define FLASH_DEVICE_ID      0xa6
+#define ADDIN_FIRST_PAGE     0x60
+#define ADDIN_SLOT_PAGES     4
+#define ADDIN_ACTIVE_BIT     0x40
 #define FLASH_PAGES          (FLASH_SIZE / PAGE_SIZE)
 #define RAM_FIRST_PAGE       0x400
 #define RAM_CHIP_PAGES       16
@@ -156,6 +159,7 @@ static void flash_write(machine_t *machine, uint32_t offset, uint8_t value) {
     uint32_t block = offset / FLASH_BLOCK_SIZE;
     if (flash->mode == FLASH_PROGRAM_SETUP) {
         if (offset >= (uint32_t)FLASH_FIRST_DATA_PAGE * PAGE_SIZE) machine->flash[offset] &= value;
+        if (machine->trace_ports) machine_log(machine, "flash program %06x <- %02x = %02x pc %04x", offset, value, machine->flash[offset], machine->cpu.pc);
         flash->mode = FLASH_READ_STATUS;
         flash->block = block;
         flash->status = 0x80;
@@ -631,4 +635,21 @@ void machine_set_watch_pc(machine_t *machine, int pc) {
 
 uint8_t machine_peek(machine_t *machine, uint16_t address) {
     return read_byte(machine, address);
+}
+
+int machine_free_addin_slot(machine_t *machine) {
+    for (int slot = 0; slot < MACHINE_ADDIN_SLOTS; slot++) {
+        size_t offset = (size_t)(ADDIN_FIRST_PAGE + slot * ADDIN_SLOT_PAGES) * PAGE_SIZE;
+        uint8_t type = machine->flash[offset];
+        if (type == 0xff || !(type & ADDIN_ACTIVE_BIT)) return slot;
+    }
+    return -1;
+}
+
+bool machine_write_addin_slot(machine_t *machine, int slot, const uint8_t *data, size_t length) {
+    if (slot < 0 || slot >= MACHINE_ADDIN_SLOTS || length > (size_t)ADDIN_SLOT_PAGES * PAGE_SIZE) return false;
+    size_t offset = (size_t)(ADDIN_FIRST_PAGE + slot * ADDIN_SLOT_PAGES) * PAGE_SIZE;
+    memset(machine->flash + offset, 0xff, (size_t)ADDIN_SLOT_PAGES * PAGE_SIZE);
+    memcpy(machine->flash + offset, data, length);
+    return true;
 }

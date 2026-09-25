@@ -70,6 +70,7 @@ void menu_install(void) {
     add_item(run, MENU_RELOAD, @"Reset", @"r", NSEventModifierFlagCommand);
     add_item(run, MENU_INTERRUPT, @"Press ON (Ctrl-C)", @"", 0);
     add_item(run, MENU_INITIALIZE, @"Initialize Memory", @"", 0);
+    add_item(run, MENU_INSTALL_WZD, @"Install .wzd…", @"i", NSEventModifierFlagCommand);
     [run addItem:[NSMenuItem separatorItem]];
     add_item(run, MENU_SHOW_REPL, @"Show REPL", @"j", NSEventModifierFlagCommand);
     add_item(run, MENU_FOCUS_REPL, @"Focus REPL", @"l", NSEventModifierFlagCommand);

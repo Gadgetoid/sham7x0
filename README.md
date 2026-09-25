@@ -33,6 +33,23 @@ Clicked keyboard keys go straight to the key matrix, so Shift, 2nd and CAPS beha
 
 Headless keys are `SECONDS:COLUMN.ROW/HOLD`. Column 99 is the ON key.
 
+## Installing programs
+
+Run > Install .wzd (Cmd-I), `--install=FILE` or the console `install PATH` writes a BASIC or machine code `.wzd` straight into a free My Programs slot. Put test files in `apps/` (ignored by git). MEMO and SCHEDULE `.wzd` files aren't supported yet.
+
+A slot is 32KB at page 60 + 4n, ten in all:
+
+| Offset | Content |
+|---|---|
+| 00 | type, 40 for a program. Deleting clears bit 6 |
+| 08 | offset of the file name record: 2 bytes, then the name |
+| 0A | offset of the title record: 1 byte, then the NUL terminated title |
+| 0C | offset of the program record: 1 byte, 16-bit length, then the tokenized program |
+| 0E | slot id, 101 + slot |
+| 10 | icon block from `<BIN>`: length, then a 12x12 bitmap |
+
+The `<BIN>` payload is the icon block followed by the tokenized program. Bytes 01-07 and the record lead bytes are written as zero; the firmware doesn't read them.
+
 ## Hardware notes
 
 From the firmware and [ozdev](https://github.com/arpruss/ozdev).
@@ -55,7 +72,9 @@ From the firmware and [ozdev](https://github.com/arpruss/ozdev).
 | Ports 30-3F | RP5C01-style RTC, one BCD nibble per register |
 | Ports 16-19 | sound: 19 tone mode, 17/18 divisor, 16 bit 0 on. 16384 / (divisor + 2) Hz |
 | Ports 40-47 | UART |
-| Flash | Intel/Sharp command set (FF, 40, 20/D0, 50, 70, 90), 64KB erase blocks |
+| Flash | Intel/Sharp command set (FF, 40, 20/D0, 50, 60, 70, 90), 64KB erase blocks, ID 89/A6 |
+| RAM | pages 400-40F and 500-50F (firmware maps 410-41F to 500-50F) |
+| Layout | system to 0BFFFF, add-ons 0C0000-10FFFF, data 110000-2EFFFF, marker at 2F0000 |
 
 ## Not done
 

@@ -23,6 +23,9 @@ KEY_H = "1.3"
 KEY_I = "3.2"
 KEY_D = "2.4"
 BACKLIGHT = "9.6"
+PROG = "9.4"
+MENU = "1.6"
+KEY_2 = "2.0"
 
 CASES = [
     {"name": "uninitialized", "seconds": 2, "keys": []},
@@ -38,6 +41,12 @@ CASES = [
      "keys": [(0.5, MEMO, 0.2), (1.5, NEW, 0.2), (2.5, SHIFT, 0.5), (2.6, KEY_H, 0.2), (3.5, KEY_I, 0.2)]},
     {"name": "power_off", "load": "main", "seconds": 2, "keys": [(0.5, POWER, 0.3)], "lcd": "lcd on 0"},
     {"name": "backlight", "load": "main", "seconds": 2, "keys": [(0.5, BACKLIGHT, 0.2)], "lcd": "backlight 1"},
+    {"name": "programs_listed", "load": "main", "install": ["Serial01", "Pegs", "Pong"], "seconds": 2,
+     "keys": [(0.5, PROG, 0.2)], "save": "programs"},
+    {"name": "basic_program_runs", "load": "programs", "seconds": 4, "keys": [(0.5, "2.0", 0.2)]},
+    {"name": "machine_code_program_runs", "load": "programs", "seconds": 4, "keys": [(0.5, "3.0", 0.2)]},
+    {"name": "program_deleted", "load": "programs", "seconds": 8,
+     "keys": [(0.5, MENU, 0.2), (1.5, KEY_2, 0.2), (2.5, ENTER, 0.2), (5, MAIN, 0.2), (6.5, PROG, 0.2)]},
 ]
 
 
@@ -72,6 +81,11 @@ def run_case(case, rom):
     command = [HEADLESS, rom, f"--seconds={case['seconds']}", f"--pbm={pbm}"]
     if case["keys"]:
         command.append("--keys=" + ",".join(f"{at}:{key}/{hold}" for at, key, hold in case["keys"]))
+    for name in case.get("install", []):
+        path = os.path.join(ROOT, "apps", name + ".wzd")
+        if not os.path.exists(path):
+            return "skip", f"no {path}"
+        command.append("--install=" + path)
     if "load" in case:
         command.append("--load=" + state_path(case["load"]))
     if "save" in case:
@@ -111,6 +125,9 @@ def main():
     for case in CASES:
         digest, error = run_case(case, options.rom)
         name = case["name"]
+        if digest == "skip":
+            print(f"skip {name}: {error}")
+            continue
         if digest is None:
             print(f"FAIL {name}: {error}")
             failures += 1

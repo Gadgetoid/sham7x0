@@ -9,6 +9,7 @@
 #include "lcd.h"
 #include "machine.h"
 #include "runtime.h"
+#include "wzd.h"
 
 #define KEYCODE_TABLE      0x23a3
 #define FIRMWARE_SHIFT     0x0800
@@ -399,6 +400,26 @@ static void present_lcd(void) {
     shown_lcd = lcd;
 }
 
+bool runtime_install_wzd(const char *path) {
+    char message[256];
+    char error[160] = "";
+    size_t size = 0;
+    uint8_t *data = machine ? read_file(path, &size) : NULL;
+    static uint8_t slot_image[WZD_SLOT_SIZE];
+    wzd_program_t program;
+    size_t slot_length = 0;
+    int slot = machine ? machine_free_addin_slot(machine) : -1;
+    if (!data) snprintf(error, sizeof error, "cannot read the file");
+    else if (slot < 0) snprintf(error, sizeof error, "all %d My Programs slots are in use", MACHINE_ADDIN_SLOTS);
+    else if (wzd_parse(data, size, &program, error, sizeof error)) slot_length = wzd_build_slot(&program, slot, slot_image, error, sizeof error);
+    bool installed = slot_length && machine_write_addin_slot(machine, slot, slot_image, slot_length);
+    if (installed) snprintf(message, sizeof message, "installed %s as My Programs %d", program.title, slot + 1);
+    else snprintf(message, sizeof message, "cannot install %s: %s", path, error);
+    console_notice(message);
+    free(data);
+    return installed;
+}
+
 static void run_command(const char *line) {
     char message[128];
     if (strcmp(line, "reset") == 0) {
@@ -411,13 +432,15 @@ static void run_command(const char *line) {
     } else if (strcmp(line, "pc") == 0) {
         snprintf(message, sizeof message, "pc %04x%s", machine_pc(machine), machine_halted(machine) ? " halted" : "");
         console_notice(message);
+    } else if (strncmp(line, "install ", 8) == 0) {
+        runtime_install_wzd(line + 8);
     } else if (strcmp(line, "save") == 0) {
         save_state();
         console_notice(persist ? "saved" : "persistence is off");
     } else if (strcmp(line, "trace on") == 0 || strcmp(line, "trace off") == 0) {
         machine_set_trace_ports(machine, strcmp(line, "trace on") == 0);
     } else {
-        console_notice("commands: reset, init (reset holding ON), on, save, pc, trace on, trace off");
+        console_notice("commands: reset, init (reset holding ON), on, install PATH, save, pc, trace on, trace off");
     }
 }
 

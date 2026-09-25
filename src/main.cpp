@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <mutex>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -28,6 +29,16 @@
 #include "runtime.h"
 
 static uint64_t start_ticks = 0;
+static std::mutex install_lock;
+static std::vector<std::string> pending_installs;
+
+static void SDLCALL install_chosen(void *userdata, const char *const *files, int filter) {
+    (void)userdata;
+    (void)filter;
+    if (!files) return;
+    std::lock_guard<std::mutex> guard(install_lock);
+    for (int i = 0; files[i]; i++) pending_installs.push_back(files[i]);
+}
 static SDL_WindowID main_window_id = 0;
 
 extern "C" uint32_t host_ticks_ms(void) {
@@ -37,6 +48,8 @@ extern "C" uint32_t host_ticks_ms(void) {
 struct Options {
     std::string rom = "rom/r162.da1";
     std::string data = "data";
+    std::string apps = "apps";
+    std::vector<std::string> install;
     std::string screenshot;
     std::string keys;
     std::vector<std::string> exec;
@@ -146,6 +159,8 @@ static void usage() {
         "  --rom=FILE          firmware image (default rom/r162.da1)\n"
         "  --data=DIR          settings and saved machine state (default data)\n"
         "  --fresh             ignore and do not write the saved machine state\n"
+        "  --apps=DIR          where Install .wzd starts looking (default apps)\n"
+        "  --install=FILE      install a .wzd program after boot, repeatable\n"
         "  --size=WxH          window size (default 1400x900)\n"
         "  --dead-columns      simulate failed LCD column drivers\n"
         "  --no-repl           start with the REPL hidden\n"
@@ -182,6 +197,8 @@ static bool parse_options(int argc, char **argv, Options &options) {
         };
         if (const char *v = value("--rom=")) options.rom = v;
         else if (const char *v = value("--data=")) options.data = v;
+        else if (const char *v = value("--apps=")) options.apps = v;
+        else if (const char *v = value("--install=")) options.install.push_back(v);
         else if (const char *v = value("--screenshot=")) options.screenshot = v;
         else if (const char *v = value("--frames=")) options.frames = atoi(v);
         else if (const char *v = value("--keys=")) options.keys = v;
@@ -505,6 +522,7 @@ int main(int argc, char **argv) {
     if (!parse_options(argc, argv, options)) return 1;
 
     options.rom = absolute(options.rom);
+    options.apps = absolute(options.apps);
     options.data = absolute(options.data);
     options.screenshot = absolute(options.screenshot);
     mkdir(options.data.c_str(), 0755);
@@ -560,6 +578,7 @@ int main(int argc, char **argv) {
     bool persist = !options.fresh && (options.screenshot.empty() || getenv("POCKET_PERSIST"));
     host_config_t config = { options.rom.c_str(), options.data.c_str(), persist };
     if (!runtime_init(&config)) return 1;
+    for (auto &path : options.install) runtime_install_wzd(absolute(path).c_str());
 
     for (auto &line : options.exec) console_submit(line.c_str());
     KeyScript script;
@@ -638,6 +657,11 @@ int main(int argc, char **argv) {
                 case MENU_RELOAD:       runtime_request_reload(); break;
                 case MENU_INTERRUPT:    runtime_interrupt(); break;
                 case MENU_INITIALIZE:   runtime_initialize_memory(); break;
+                case MENU_INSTALL_WZD: {
+                    static const SDL_DialogFileFilter filters[] = { { "Sharp organizer programs", "wzd" } };
+                    SDL_ShowOpenFileDialog(install_chosen, nullptr, window, filters, 1, options.apps.c_str(), true);
+                    break;
+                }
                 case MENU_SHOW_REPL:
                     show_repl = !show_repl;
                     set_repl_visible(window, show_repl, device, restore_height);
@@ -680,6 +704,11 @@ int main(int argc, char **argv) {
                 save_settings(options.data, current);
                 saved = current;
             }
+        }
+        {
+            std::lock_guard<std::mutex> guard(install_lock);
+            for (auto &path : pending_installs) runtime_install_wzd(path.c_str());
+            pending_installs.clear();
         }
         menu_ensure();
         menu_set_checked(MENU_SHOW_REPL, show_repl);
