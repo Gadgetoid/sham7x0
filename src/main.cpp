@@ -44,6 +44,7 @@ struct Options {
     int width = 1400;
     int height = 900;
     bool dead_columns = false;
+    bool fresh = false;
     bool show_repl = true;
     bool show_keys = true;
     bool show_keyboard = true;
@@ -143,7 +144,8 @@ static void usage() {
     printf(
         "usage: zq77x-emu [options]\n"
         "  --rom=FILE          firmware image (default rom/r162.da1)\n"
-        "  --data=DIR          settings directory (default data)\n"
+        "  --data=DIR          settings and saved machine state (default data)\n"
+        "  --fresh             ignore and do not write the saved machine state\n"
         "  --size=WxH          window size (default 1400x900)\n"
         "  --dead-columns      simulate failed LCD column drivers\n"
         "  --no-repl           start with the REPL hidden\n"
@@ -186,6 +188,7 @@ static bool parse_options(int argc, char **argv, Options &options) {
         else if (const char *v = value("--exec=")) options.exec.push_back(v);
         else if (const char *v = value("--size=")) sscanf(v, "%dx%d", &options.width, &options.height);
         else if (arg == "--dead-columns") options.dead_columns = true;
+        else if (arg == "--fresh") options.fresh = true;
         else if (arg == "--no-repl") options.show_repl = false;
         else if (arg == "--no-keys") options.layout = 1;
         else if (arg == "--no-keyboard") options.layout = 2;
@@ -554,7 +557,8 @@ int main(int argc, char **argv) {
     if (options.dead_columns) lcd_set_dead_columns(true);
     lcd_set_backlight(options.backlight);
 
-    host_config_t config = { options.rom.c_str(), options.data.c_str() };
+    bool persist = !options.fresh && (options.screenshot.empty() || getenv("POCKET_PERSIST"));
+    host_config_t config = { options.rom.c_str(), options.data.c_str(), persist };
     if (!runtime_init(&config)) return 1;
 
     for (auto &line : options.exec) console_submit(line.c_str());

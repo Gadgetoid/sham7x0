@@ -19,6 +19,17 @@ typedef struct machine machine_t;
 
 typedef void (*machine_log_fn)(const char *message);
 
+typedef struct {
+    uint64_t cycle;
+    float    frequency;
+} machine_sound_event_t;
+
+typedef struct {
+    bool on;
+    int  contrast;
+    bool backlight;
+} machine_lcd_t;
+
 machine_t     *machine_create(const uint8_t *flash_image, size_t flash_size);
 void           machine_destroy(machine_t *machine);
 void           machine_reset(machine_t *machine);
@@ -27,7 +38,12 @@ void           machine_set_key(machine_t *machine, int column, int row, bool dow
 void           machine_set_power_key(machine_t *machine, bool down);
 void           machine_release_keys(machine_t *machine);
 const uint8_t *machine_screen(machine_t *machine);
-bool           machine_screen_on(machine_t *machine);
+machine_lcd_t  machine_lcd(machine_t *machine);
+bool           machine_pop_sound(machine_t *machine, machine_sound_event_t *event);
+uint64_t       machine_cycles(machine_t *machine);
+bool           machine_save(machine_t *machine, const char *path, int64_t host_time);
+bool           machine_load(machine_t *machine, const char *path, int64_t *host_time);
+void           machine_advance_clock(machine_t *machine, int64_t seconds);
 uint16_t       machine_pc(machine_t *machine);
 bool           machine_halted(machine_t *machine);
 void           machine_set_log(machine_t *machine, machine_log_fn log);

@@ -16,6 +16,8 @@ int         runtime_boots(void);
 const char *runtime_get_resume(void);
 void        runtime_set_resume(const char *name);
 void        runtime_press_power(void);
+bool        runtime_keyboard_key(const char *id, bool down);
+bool        runtime_keyboard_latched(const char *id);
 void        runtime_initialize_memory(void);
 void        runtime_deinit(void);
 

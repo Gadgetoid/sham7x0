@@ -24,6 +24,10 @@
 #define INTERRUPT_TICK       0x20
 #define INTERRUPT_POWER_KEY  0x80
 #define POWER_KEY_BIT        0x10
+#define STATUS_INPUTS        0xe8
+#define SOUND_QUEUE_SIZE     256
+#define SOUND_BASE_HZ        16384.0f
+#define SNAPSHOT_MAGIC       "ZQ77XSNAP2"
 
 typedef enum {
     FLASH_READ_ARRAY,
@@ -45,6 +49,22 @@ typedef struct {
     uint32_t cycles_into_second;
 } rtc_t;
 
+typedef struct {
+    uint16_t low_window_page;
+    uint16_t high_window_page;
+    uint16_t display_page;
+    uint16_t lcd_control;
+    bool     lcd_control_written;
+    uint8_t  interrupt_status;
+    uint8_t  interrupt_mask;
+    uint8_t  column_select_low;
+    uint8_t  column_select_high;
+    uint8_t  ports[256];
+    uint32_t cycles_into_tick;
+    rtc_t    rtc;
+    flash_state_t flash_state;
+} saved_state_t;
+
 struct machine {
     z80      cpu;
     uint8_t *flash;
@@ -54,6 +74,7 @@ struct machine {
     uint16_t high_window_page;
     uint16_t display_page;
     uint16_t lcd_control;
+    bool     lcd_control_written;
     uint8_t  interrupt_status;
     uint8_t  interrupt_mask;
     uint8_t  column_select_low;
@@ -70,6 +91,10 @@ struct machine {
     uint32_t *pc_histogram;
     int watch_pc;
     int watch_hits;
+    float    sound_frequency;
+    machine_sound_event_t sound_queue[SOUND_QUEUE_SIZE];
+    unsigned sound_head;
+    unsigned sound_tail;
 };
 
 static void machine_log(machine_t *machine, const char *format, ...) {
@@ -170,6 +195,7 @@ static void write_byte(void *userdata, uint16_t address, uint8_t value) {
         return;
     }
     if (page == LCD_CONTROL_PAGE) {
+        machine->lcd_control_written = true;
         if (address & 1) machine->lcd_control = (uint16_t)((machine->lcd_control & 0x00ff) | value << 8);
         else machine->lcd_control = (uint16_t)((machine->lcd_control & 0xff00) | value);
         return;
@@ -261,6 +287,17 @@ static void rtc_advance_second(rtc_t *rtc) {
     rtc_set_digits(clock, 11, year);
 }
 
+static void update_sound(machine_t *machine) {
+    uint16_t divisor = (uint16_t)(machine->ports[0x17] | machine->ports[0x18] << 8);
+    float frequency = (machine->ports[0x16] & 1) ? SOUND_BASE_HZ / (float)(divisor + 2) : 0.0f;
+    if (frequency == machine->sound_frequency) return;
+    machine->sound_frequency = frequency;
+    unsigned next = (machine->sound_head + 1) % SOUND_QUEUE_SIZE;
+    if (next == machine->sound_tail) return;
+    machine->sound_queue[machine->sound_head] = (machine_sound_event_t){ machine->cpu.cyc, frequency };
+    machine->sound_head = next;
+}
+
 static uint8_t port_in(z80 *cpu, uint8_t port) {
     machine_t *machine = cpu->userdata;
     uint8_t value;
@@ -273,7 +310,7 @@ static uint8_t port_in(z80 *cpu, uint8_t port) {
         case 0x07: value = machine->interrupt_mask; break;
         case 0x10: value = keyboard_rows(machine); break;
         case 0x11: value = machine->column_select_low; break;
-        case 0x12: value = machine->ports[0x12]; break;
+        case 0x12: value = (uint8_t)((machine->ports[0x12] & ~STATUS_INPUTS) | STATUS_INPUTS); break;
         case 0x22: value = machine->display_page & 0xff; break;
         case 0x23: value = machine->display_page >> 8; break;
         case 0x46: value = (uint8_t)((machine->ports[0x46] & ~POWER_KEY_BIT) | (machine->power_key ? POWER_KEY_BIT : 0)); break;
@@ -301,6 +338,10 @@ static void port_out(z80 *cpu, uint8_t port, uint8_t value) {
         case 0x12: machine->column_select_high = value & 0x07; return;
         case 0x22: machine->display_page = (uint16_t)((machine->display_page & 0xff00) | value); break;
         case 0x23: machine->display_page = (uint16_t)((machine->display_page & 0x00ff) | value << 8); break;
+        case 0x16:
+        case 0x17:
+        case 0x18:
+        case 0x19: update_sound(machine); break;
         default:
             if (port >= 0x30 && port <= 0x3f) rtc_write(machine, port - 0x30, value);
             break;
@@ -311,6 +352,7 @@ static void port_out(z80 *cpu, uint8_t port, uint8_t value) {
 machine_t *machine_create(const uint8_t *flash_image, size_t flash_size) {
     machine_t *machine = calloc(1, sizeof *machine);
     if (!machine) return NULL;
+    machine->watch_pc = -1;
     machine->flash = malloc(FLASH_SIZE);
     machine->ram = calloc(RAM_PAGES, PAGE_SIZE);
     if (!machine->flash || !machine->ram) {
@@ -344,6 +386,9 @@ void machine_reset(machine_t *machine) {
     machine->interrupt_status = 0;
     machine->interrupt_mask = 0xff;
     machine->cycles_into_tick = 0;
+    machine->lcd_control_written = false;
+    machine->ports[0x16] = 0;
+    update_sound(machine);
 }
 
 static void update_interrupt_line(machine_t *machine) {
@@ -407,9 +452,117 @@ const uint8_t *machine_screen(machine_t *machine) {
     return machine->screen;
 }
 
-bool machine_screen_on(machine_t *machine) {
-    (void)machine;
+machine_lcd_t machine_lcd(machine_t *machine) {
+    machine_lcd_t lcd = { true, 0x20, false };
+    if (!machine->lcd_control_written) return lcd;
+    lcd.on = (machine->lcd_control & 0x80) && !(machine->lcd_control & 0x40) && (machine->ports[0x20] & 1);
+    lcd.contrast = machine->lcd_control & 0x3f;
+    lcd.backlight = (machine->lcd_control >> 8) & 1;
+    return lcd;
+}
+
+bool machine_pop_sound(machine_t *machine, machine_sound_event_t *event) {
+    if (machine->sound_tail == machine->sound_head) return false;
+    *event = machine->sound_queue[machine->sound_tail];
+    machine->sound_tail = (machine->sound_tail + 1) % SOUND_QUEUE_SIZE;
     return true;
+}
+
+uint64_t machine_cycles(machine_t *machine) {
+    return machine->cpu.cyc;
+}
+
+static void capture_state(machine_t *machine, saved_state_t *state) {
+    state->low_window_page = machine->low_window_page;
+    state->high_window_page = machine->high_window_page;
+    state->display_page = machine->display_page;
+    state->lcd_control = machine->lcd_control;
+    state->lcd_control_written = machine->lcd_control_written;
+    state->interrupt_status = machine->interrupt_status;
+    state->interrupt_mask = machine->interrupt_mask;
+    state->column_select_low = machine->column_select_low;
+    state->column_select_high = machine->column_select_high;
+    memcpy(state->ports, machine->ports, sizeof state->ports);
+    state->cycles_into_tick = machine->cycles_into_tick;
+    state->rtc = machine->rtc;
+    state->flash_state = machine->flash_state;
+}
+
+static void restore_state(machine_t *machine, const saved_state_t *state) {
+    machine->low_window_page = state->low_window_page;
+    machine->high_window_page = state->high_window_page;
+    machine->display_page = state->display_page;
+    machine->lcd_control = state->lcd_control;
+    machine->lcd_control_written = state->lcd_control_written;
+    machine->interrupt_status = state->interrupt_status;
+    machine->interrupt_mask = state->interrupt_mask;
+    machine->column_select_low = state->column_select_low;
+    machine->column_select_high = state->column_select_high;
+    memcpy(machine->ports, state->ports, sizeof machine->ports);
+    machine->cycles_into_tick = state->cycles_into_tick;
+    machine->rtc = state->rtc;
+    machine->flash_state = state->flash_state;
+}
+
+bool machine_save(machine_t *machine, const char *path, int64_t host_time) {
+    FILE *file = fopen(path, "wb");
+    if (!file) return false;
+    saved_state_t state;
+    memset(&state, 0, sizeof state);
+    capture_state(machine, &state);
+    uint32_t sizes[3] = { (uint32_t)sizeof(z80), (uint32_t)sizeof state, (uint32_t)RAM_PAGES };
+    size_t data_offset = (size_t)FLASH_FIRST_DATA_PAGE * PAGE_SIZE;
+    bool ok = fwrite(SNAPSHOT_MAGIC, sizeof SNAPSHOT_MAGIC, 1, file) == 1 &&
+              fwrite(sizes, sizeof sizes, 1, file) == 1 &&
+              fwrite(&host_time, sizeof host_time, 1, file) == 1 &&
+              fwrite(&machine->cpu, sizeof machine->cpu, 1, file) == 1 &&
+              fwrite(&state, sizeof state, 1, file) == 1 &&
+              fwrite(machine->ram, PAGE_SIZE, RAM_PAGES, file) == RAM_PAGES &&
+              fwrite(machine->flash + data_offset, FLASH_SIZE - data_offset, 1, file) == 1;
+    ok = fclose(file) == 0 && ok;
+    return ok;
+}
+
+bool machine_load(machine_t *machine, const char *path, int64_t *host_time) {
+    FILE *file = fopen(path, "rb");
+    if (!file) return false;
+    char magic[sizeof SNAPSHOT_MAGIC];
+    uint32_t sizes[3];
+    uint32_t expected[3] = { (uint32_t)sizeof(z80), (uint32_t)sizeof(saved_state_t), (uint32_t)RAM_PAGES };
+    z80 cpu;
+    saved_state_t state;
+    size_t data_offset = (size_t)FLASH_FIRST_DATA_PAGE * PAGE_SIZE;
+    uint8_t *ram = malloc((size_t)RAM_PAGES * PAGE_SIZE);
+    uint8_t *data = malloc(FLASH_SIZE - data_offset);
+    bool ok = ram && data &&
+              fread(magic, sizeof magic, 1, file) == 1 && memcmp(magic, SNAPSHOT_MAGIC, sizeof magic) == 0 &&
+              fread(sizes, sizeof sizes, 1, file) == 1 && memcmp(sizes, expected, sizeof sizes) == 0 &&
+              fread(host_time, sizeof *host_time, 1, file) == 1 &&
+              fread(&cpu, sizeof cpu, 1, file) == 1 &&
+              fread(&state, sizeof state, 1, file) == 1 &&
+              fread(ram, PAGE_SIZE, RAM_PAGES, file) == RAM_PAGES &&
+              fread(data, FLASH_SIZE - data_offset, 1, file) == 1;
+    fclose(file);
+    if (ok) {
+        machine_reset(machine);
+        cpu.read_byte = read_byte;
+        cpu.write_byte = write_byte;
+        cpu.port_in = port_in;
+        cpu.port_out = port_out;
+        cpu.userdata = machine;
+        machine->cpu = cpu;
+        restore_state(machine, &state);
+        memcpy(machine->ram, ram, (size_t)RAM_PAGES * PAGE_SIZE);
+        memcpy(machine->flash + data_offset, data, FLASH_SIZE - data_offset);
+        machine_release_keys(machine);
+    }
+    free(ram);
+    free(data);
+    return ok;
+}
+
+void machine_advance_clock(machine_t *machine, int64_t seconds) {
+    for (int64_t second = 0; second < seconds; second++) rtc_advance_second(&machine->rtc);
 }
 
 uint16_t machine_pc(machine_t *machine) {

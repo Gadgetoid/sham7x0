@@ -121,6 +121,10 @@ int main(int argc, char **argv) {
         }
         if (profile_from >= 0 && now >= profile_from) machine_set_pc_histogram(machine, histogram);
         machine_run(machine, MACHINE_CLOCK_HZ / slices_per_second);
+        machine_sound_event_t sound;
+        while (machine_pop_sound(machine, &sound)) {
+            fprintf(stderr, "sound %.3fs %.0f Hz\n", (double)sound.cycle / MACHINE_CLOCK_HZ, sound.frequency);
+        }
         if (slice % slices_per_second == 0) {
             fprintf(stderr, "t=%.1fs pc=%04x%s\n", now, machine_pc(machine), machine_halted(machine) ? " halted" : "");
         }
@@ -145,6 +149,8 @@ int main(int argc, char **argv) {
             }
         }
     }
+    machine_lcd_t lcd = machine_lcd(machine);
+    fprintf(stderr, "lcd on %d contrast %d backlight %d\n", lcd.on, lcd.contrast, lcd.backlight);
     const uint8_t *screen = machine_screen(machine);
     static uint8_t page_copy[MACHINE_SCREEN_ROW_BYTES * MACHINE_SCREEN_HEIGHT];
     if (dump_page >= 0 && machine_read_page(machine, (uint16_t)dump_page, page_copy, sizeof page_copy)) screen = page_copy;
