@@ -1,0 +1,149 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "machine.h"
+
+typedef struct {
+    double at_seconds;
+    int column;
+    int row;
+    bool down;
+} key_event_t;
+
+static uint8_t *read_file(const char *path, size_t *size) {
+    FILE *file = fopen(path, "rb");
+    if (!file) return NULL;
+    fseek(file, 0, SEEK_END);
+    long length = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    uint8_t *data = malloc((size_t)length);
+    if (data && fread(data, 1, (size_t)length, file) != (size_t)length) {
+        free(data);
+        data = NULL;
+    }
+    fclose(file);
+    *size = (size_t)length;
+    return data;
+}
+
+static bool pixel(const uint8_t *screen, int x, int y) {
+    return screen[y * MACHINE_SCREEN_ROW_BYTES + x / 8] >> (x % 8) & 1;
+}
+
+static void print_screen(const uint8_t *screen) {
+    for (int y = 0; y < MACHINE_SCREEN_HEIGHT; y += 2) {
+        char line[MACHINE_SCREEN_WIDTH / 2 + 1];
+        for (int x = 0; x < MACHINE_SCREEN_WIDTH; x += 2) {
+            int count = pixel(screen, x, y) + pixel(screen, x + 1, y) + pixel(screen, x, y + 1) + pixel(screen, x + 1, y + 1);
+            line[x / 2] = " .:#"[count > 2 ? 3 : count];
+        }
+        line[MACHINE_SCREEN_WIDTH / 2] = 0;
+        printf("|%s|\n", line);
+    }
+}
+
+static void save_pbm(const uint8_t *screen, const char *path) {
+    FILE *file = fopen(path, "wb");
+    if (!file) return;
+    fprintf(file, "P4\n%d %d\n", MACHINE_SCREEN_WIDTH, MACHINE_SCREEN_HEIGHT);
+    for (int y = 0; y < MACHINE_SCREEN_HEIGHT; y++) {
+        for (int byte = 0; byte < MACHINE_SCREEN_ROW_BYTES; byte++) {
+            uint8_t value = screen[y * MACHINE_SCREEN_ROW_BYTES + byte];
+            uint8_t reversed = 0;
+            for (int bit = 0; bit < 8; bit++) {
+                if (value >> bit & 1) reversed |= (uint8_t)(0x80 >> bit);
+            }
+            fputc(reversed, file);
+        }
+    }
+    fclose(file);
+}
+
+static int parse_keys(const char *spec, key_event_t *events, int capacity) {
+    int count = 0;
+    const char *cursor = spec;
+    while (*cursor && count + 1 < capacity) {
+        double at = 0, hold = 0.1;
+        int column = 0, row = 0, consumed = 0;
+        if (sscanf(cursor, "%lf:%d.%d/%lf%n", &at, &column, &row, &hold, &consumed) < 3) break;
+        events[count++] = (key_event_t){ at, column, row, true };
+        events[count++] = (key_event_t){ at + hold, column, row, false };
+        cursor += consumed;
+        if (*cursor == ',') cursor++;
+    }
+    return count;
+}
+
+int main(int argc, char **argv) {
+    const char *rom_path = NULL;
+    const char *pbm_path = NULL;
+    double seconds = 3;
+    bool trace_ports = false;
+    double profile_from = -1;
+    static uint32_t histogram[65536];
+    key_event_t events[64];
+    int event_count = 0;
+    for (int i = 1; i < argc; i++) {
+        if (strncmp(argv[i], "--seconds=", 10) == 0) seconds = atof(argv[i] + 10);
+        else if (strncmp(argv[i], "--pbm=", 6) == 0) pbm_path = argv[i] + 6;
+        else if (strncmp(argv[i], "--keys=", 7) == 0) event_count = parse_keys(argv[i] + 7, events, 64);
+        else if (strcmp(argv[i], "--trace-ports") == 0) trace_ports = true;
+        else if (strncmp(argv[i], "--profile=", 10) == 0) profile_from = atof(argv[i] + 10);
+        else rom_path = argv[i];
+    }
+    if (!rom_path) {
+        fprintf(stderr, "usage: headless ROM [--seconds=N] [--pbm=FILE] [--trace-ports] [--keys=T:COL.ROW/HOLD,...]\n");
+        return 1;
+    }
+    size_t size = 0;
+    uint8_t *image = read_file(rom_path, &size);
+    if (!image) {
+        fprintf(stderr, "cannot read %s\n", rom_path);
+        return 1;
+    }
+    machine_t *machine = machine_create(image, size);
+    machine_set_trace_ports(machine, trace_ports);
+    const int slices_per_second = 100;
+    int total_slices = (int)(seconds * slices_per_second);
+    for (int slice = 0; slice < total_slices; slice++) {
+        double now = (double)slice / slices_per_second;
+        for (int i = 0; i < event_count; i++) {
+            if (events[i].at_seconds >= now && events[i].at_seconds < now + 1.0 / slices_per_second) {
+                if (events[i].column == MACHINE_POWER_KEY_COLUMN) machine_set_power_key(machine, events[i].down);
+                else machine_set_key(machine, events[i].column, events[i].row, events[i].down);
+            }
+        }
+        if (profile_from >= 0 && now >= profile_from) machine_set_pc_histogram(machine, histogram);
+        machine_run(machine, MACHINE_CLOCK_HZ / slices_per_second);
+        if (slice % slices_per_second == 0) {
+            fprintf(stderr, "t=%.1fs pc=%04x%s\n", now, machine_pc(machine), machine_halted(machine) ? " halted" : "");
+        }
+    }
+    if (profile_from >= 0) {
+        for (int rank = 0; rank < 40; rank++) {
+            int best = 0;
+            for (int address = 0; address < 65536; address++) {
+                if (histogram[address] > histogram[best]) best = address;
+            }
+            if (!histogram[best]) break;
+            fprintf(stderr, "pc %04x  %u\n", best, histogram[best]);
+            histogram[best] = 0;
+        }
+        int run_start = -1;
+        for (int address = 0; address <= 65536; address++) {
+            bool hit = address < 65536 && histogram[address];
+            if (hit && run_start < 0) run_start = address;
+            if (!hit && run_start >= 0) {
+                fprintf(stderr, "range %04x-%04x\n", run_start, address - 1);
+                run_start = -1;
+            }
+        }
+    }
+    const uint8_t *screen = machine_screen(machine);
+    print_screen(screen);
+    if (pbm_path) save_pbm(screen, pbm_path);
+    machine_destroy(machine);
+    free(image);
+    return 0;
+}

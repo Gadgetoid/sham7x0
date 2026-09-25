@@ -1,0 +1,2489 @@
+{
+ "description": "Sharp ZQ-770 keyboard measured from ref2.jpg. Units: keybed top face width = 1000; origin at the top-left corner of the keybed top face; y down. x/y are key centres, w/h the key face size. Shapes: pill (fully rounded ends, radius h/2) and d_key (flat end with small corners, the other end a half superellipse of the given depth; round_side names the round end). All keys of one kind share a size.",
+ "second_function": {
+  "mode": "one_shot_latch",
+  "key": "fn_2nd",
+  "behaviour": "Press and release 2nd to latch it; the next key press sends that key's purple (2nd) legend function, then the latch clears. Pressing 2nd again while latched cancels it.",
+  "legend_colour": "purple"
+ },
+ "shift_legends": {
+  "legend_colour": "grey",
+  "behaviour": "Grey legends above keys are the shifted characters."
+ },
+ "measurement": {
+  "photo": "ref2.jpg",
+  "photo_corners_px": [
+   [
+    208.1,
+    846.0
+   ],
+   [
+    1707.9,
+    846.0
+   ],
+   [
+    1760.6,
+    1256.0
+   ],
+   [
+    137.8,
+    1256.0
+   ]
+  ],
+  "depth_stretch": 1.07,
+  "column_pitch": 83.75,
+  "measured_row_y": {
+   "1": 34.7,
+   "2": 89.3,
+   "3": 137.6,
+   "4": 186.3,
+   "5": 232.7
+  },
+  "row_spacing_added": {
+   "1": 0.0,
+   "2": 0.0,
+   "3": 0.5,
+   "4": 1.0,
+   "5": 4.5
+  },
+  "note": "Rows 3-5 are spaced further apart than measured to give the 2nd-function labels clearance. Each key keeps its photo-measured centre under 'measured'."
+ },
+ "kinds": {
+  "digit": {
+   "shape": "pill",
+   "w": 62.9,
+   "h": 35.1
+  },
+  "esc": {
+   "shape": "pill",
+   "w": 75.2,
+   "h": 35.1
+  },
+  "letter": {
+   "shape": "pill",
+   "w": 63.5,
+   "h": 36.6
+  },
+  "del": {
+   "shape": "pill",
+   "w": 88.7,
+   "h": 38.0
+  },
+  "enter_wide": {
+   "shape": "pill",
+   "w": 137.7,
+   "h": 36.9
+  },
+  "shift": {
+   "shape": "pill",
+   "w": 62.2,
+   "h": 36.6
+  },
+  "function": {
+   "shape": "pill",
+   "w": 63.0,
+   "h": 35.0
+  },
+  "function_wide": {
+   "shape": "pill",
+   "w": 82.6,
+   "h": 35.0
+  },
+  "space": {
+   "shape": "pill",
+   "w": 184.4,
+   "h": 35.0
+  },
+  "cursor": {
+   "shape": "d_key",
+   "length": 35.0,
+   "breadth": 35.0,
+   "depth": 28.378,
+   "exponent": 1.9,
+   "corner": 3.5
+  }
+ },
+ "cursor_profile_note": "Cursor pebble fits a 35 x 35 square; the round end keeps the revision-1 tip proportion (depth / half-width = 30 / 18.5, exponent 1.9).",
+ "label_clearance": 3.2,
+ "fonts": {
+  "legend": {
+   "file": "/System/Library/Fonts/HelveticaNeue.ttc",
+   "index": 10,
+   "name": "Helvetica Neue Medium",
+   "stretch": 1.14
+  },
+  "label": {
+   "file": "/System/Library/Fonts/HelveticaNeue.ttc",
+   "index": 0,
+   "name": "Helvetica Neue Regular",
+   "stretch": 1.14
+  },
+  "alpha": 0.88
+ },
+ "keyboard": {
+  "width": 1000.0,
+  "height": 281.0,
+  "top_corner_radius": 16.0,
+  "bottom_corner_radius": 28.0,
+  "front_depth": 20.0,
+  "front_seam": 11.0,
+  "lip_width": 9.0,
+  "finger_recess": {
+   "x": 498.5,
+   "y_offset": -0.5,
+   "w": 402.0,
+   "h": 19.0
+  }
+ },
+ "recesses": [
+  {
+   "id": "cursor_well",
+   "shape": "circle",
+   "x": 878.65,
+   "y": 226.0,
+   "r": 38.5,
+   "outline": [
+    [
+     917.15,
+     226.0
+    ],
+    [
+     917.13,
+     227.34
+    ],
+    [
+     917.06,
+     228.69
+    ],
+    [
+     916.94,
+     230.02
+    ],
+    [
+     916.78,
+     231.36
+    ],
+    [
+     916.57,
+     232.69
+    ],
+    [
+     916.31,
+     234.0
+    ],
+    [
+     916.01,
+     235.31
+    ],
+    [
+     915.66,
+     236.61
+    ],
+    [
+     915.27,
+     237.9
+    ],
+    [
+     914.83,
+     239.17
+    ],
+    [
+     914.35,
+     240.42
+    ],
+    [
+     913.82,
+     241.66
+    ],
+    [
+     913.25,
+     242.88
+    ],
+    [
+     912.64,
+     244.07
+    ],
+    [
+     911.99,
+     245.25
+    ],
+    [
+     911.3,
+     246.4
+    ],
+    [
+     910.57,
+     247.53
+    ],
+    [
+     909.8,
+     248.63
+    ],
+    [
+     908.99,
+     249.7
+    ],
+    [
+     908.14,
+     250.75
+    ],
+    [
+     907.26,
+     251.76
+    ],
+    [
+     906.34,
+     252.74
+    ],
+    [
+     905.39,
+     253.69
+    ],
+    [
+     904.41,
+     254.61
+    ],
+    [
+     903.4,
+     255.49
+    ],
+    [
+     902.35,
+     256.34
+    ],
+    [
+     901.28,
+     257.15
+    ],
+    [
+     900.18,
+     257.92
+    ],
+    [
+     899.05,
+     258.65
+    ],
+    [
+     897.9,
+     259.34
+    ],
+    [
+     896.72,
+     259.99
+    ],
+    [
+     895.53,
+     260.6
+    ],
+    [
+     894.31,
+     261.17
+    ],
+    [
+     893.07,
+     261.7
+    ],
+    [
+     891.82,
+     262.18
+    ],
+    [
+     890.55,
+     262.62
+    ],
+    [
+     889.26,
+     263.01
+    ],
+    [
+     887.96,
+     263.36
+    ],
+    [
+     886.65,
+     263.66
+    ],
+    [
+     885.34,
+     263.92
+    ],
+    [
+     884.01,
+     264.13
+    ],
+    [
+     882.67,
+     264.29
+    ],
+    [
+     881.34,
+     264.41
+    ],
+    [
+     879.99,
+     264.48
+    ],
+    [
+     878.65,
+     264.5
+    ],
+    [
+     877.31,
+     264.48
+    ],
+    [
+     875.96,
+     264.41
+    ],
+    [
+     874.63,
+     264.29
+    ],
+    [
+     873.29,
+     264.13
+    ],
+    [
+     871.96,
+     263.92
+    ],
+    [
+     870.65,
+     263.66
+    ],
+    [
+     869.34,
+     263.36
+    ],
+    [
+     868.04,
+     263.01
+    ],
+    [
+     866.75,
+     262.62
+    ],
+    [
+     865.48,
+     262.18
+    ],
+    [
+     864.23,
+     261.7
+    ],
+    [
+     862.99,
+     261.17
+    ],
+    [
+     861.77,
+     260.6
+    ],
+    [
+     860.58,
+     259.99
+    ],
+    [
+     859.4,
+     259.34
+    ],
+    [
+     858.25,
+     258.65
+    ],
+    [
+     857.12,
+     257.92
+    ],
+    [
+     856.02,
+     257.15
+    ],
+    [
+     854.95,
+     256.34
+    ],
+    [
+     853.9,
+     255.49
+    ],
+    [
+     852.89,
+     254.61
+    ],
+    [
+     851.91,
+     253.69
+    ],
+    [
+     850.96,
+     252.74
+    ],
+    [
+     850.04,
+     251.76
+    ],
+    [
+     849.16,
+     250.75
+    ],
+    [
+     848.31,
+     249.7
+    ],
+    [
+     847.5,
+     248.63
+    ],
+    [
+     846.73,
+     247.53
+    ],
+    [
+     846.0,
+     246.4
+    ],
+    [
+     845.31,
+     245.25
+    ],
+    [
+     844.66,
+     244.07
+    ],
+    [
+     844.05,
+     242.88
+    ],
+    [
+     843.48,
+     241.66
+    ],
+    [
+     842.95,
+     240.42
+    ],
+    [
+     842.47,
+     239.17
+    ],
+    [
+     842.03,
+     237.9
+    ],
+    [
+     841.64,
+     236.61
+    ],
+    [
+     841.29,
+     235.31
+    ],
+    [
+     840.99,
+     234.0
+    ],
+    [
+     840.73,
+     232.69
+    ],
+    [
+     840.52,
+     231.36
+    ],
+    [
+     840.36,
+     230.02
+    ],
+    [
+     840.24,
+     228.69
+    ],
+    [
+     840.17,
+     227.34
+    ],
+    [
+     840.15,
+     226.0
+    ],
+    [
+     840.17,
+     224.66
+    ],
+    [
+     840.24,
+     223.31
+    ],
+    [
+     840.36,
+     221.98
+    ],
+    [
+     840.52,
+     220.64
+    ],
+    [
+     840.73,
+     219.31
+    ],
+    [
+     840.99,
+     218.0
+    ],
+    [
+     841.29,
+     216.69
+    ],
+    [
+     841.64,
+     215.39
+    ],
+    [
+     842.03,
+     214.1
+    ],
+    [
+     842.47,
+     212.83
+    ],
+    [
+     842.95,
+     211.58
+    ],
+    [
+     843.48,
+     210.34
+    ],
+    [
+     844.05,
+     209.12
+    ],
+    [
+     844.66,
+     207.93
+    ],
+    [
+     845.31,
+     206.75
+    ],
+    [
+     846.0,
+     205.6
+    ],
+    [
+     846.73,
+     204.47
+    ],
+    [
+     847.5,
+     203.37
+    ],
+    [
+     848.31,
+     202.3
+    ],
+    [
+     849.16,
+     201.25
+    ],
+    [
+     850.04,
+     200.24
+    ],
+    [
+     850.96,
+     199.26
+    ],
+    [
+     851.91,
+     198.31
+    ],
+    [
+     852.89,
+     197.39
+    ],
+    [
+     853.9,
+     196.51
+    ],
+    [
+     854.95,
+     195.66
+    ],
+    [
+     856.02,
+     194.85
+    ],
+    [
+     857.12,
+     194.08
+    ],
+    [
+     858.25,
+     193.35
+    ],
+    [
+     859.4,
+     192.66
+    ],
+    [
+     860.58,
+     192.01
+    ],
+    [
+     861.77,
+     191.4
+    ],
+    [
+     862.99,
+     190.83
+    ],
+    [
+     864.23,
+     190.3
+    ],
+    [
+     865.48,
+     189.82
+    ],
+    [
+     866.75,
+     189.38
+    ],
+    [
+     868.04,
+     188.99
+    ],
+    [
+     869.34,
+     188.64
+    ],
+    [
+     870.65,
+     188.34
+    ],
+    [
+     871.96,
+     188.08
+    ],
+    [
+     873.29,
+     187.87
+    ],
+    [
+     874.63,
+     187.71
+    ],
+    [
+     875.96,
+     187.59
+    ],
+    [
+     877.31,
+     187.52
+    ],
+    [
+     878.65,
+     187.5
+    ],
+    [
+     879.99,
+     187.52
+    ],
+    [
+     881.34,
+     187.59
+    ],
+    [
+     882.67,
+     187.71
+    ],
+    [
+     884.01,
+     187.87
+    ],
+    [
+     885.34,
+     188.08
+    ],
+    [
+     886.65,
+     188.34
+    ],
+    [
+     887.96,
+     188.64
+    ],
+    [
+     889.26,
+     188.99
+    ],
+    [
+     890.55,
+     189.38
+    ],
+    [
+     891.82,
+     189.82
+    ],
+    [
+     893.07,
+     190.3
+    ],
+    [
+     894.31,
+     190.83
+    ],
+    [
+     895.53,
+     191.4
+    ],
+    [
+     896.72,
+     192.01
+    ],
+    [
+     897.9,
+     192.66
+    ],
+    [
+     899.05,
+     193.35
+    ],
+    [
+     900.18,
+     194.08
+    ],
+    [
+     901.28,
+     194.85
+    ],
+    [
+     902.35,
+     195.66
+    ],
+    [
+     903.4,
+     196.51
+    ],
+    [
+     904.41,
+     197.39
+    ],
+    [
+     905.39,
+     198.31
+    ],
+    [
+     906.34,
+     199.26
+    ],
+    [
+     907.26,
+     200.24
+    ],
+    [
+     908.14,
+     201.25
+    ],
+    [
+     908.99,
+     202.3
+    ],
+    [
+     909.8,
+     203.37
+    ],
+    [
+     910.57,
+     204.47
+    ],
+    [
+     911.3,
+     205.6
+    ],
+    [
+     911.99,
+     206.75
+    ],
+    [
+     912.64,
+     207.93
+    ],
+    [
+     913.25,
+     209.12
+    ],
+    [
+     913.82,
+     210.34
+    ],
+    [
+     914.35,
+     211.58
+    ],
+    [
+     914.83,
+     212.83
+    ],
+    [
+     915.27,
+     214.1
+    ],
+    [
+     915.66,
+     215.39
+    ],
+    [
+     916.01,
+     216.69
+    ],
+    [
+     916.31,
+     218.0
+    ],
+    [
+     916.57,
+     219.31
+    ],
+    [
+     916.78,
+     220.64
+    ],
+    [
+     916.94,
+     221.98
+    ],
+    [
+     917.06,
+     223.31
+    ],
+    [
+     917.13,
+     224.66
+    ]
+   ],
+   "measured_offset": [
+    0.0,
+    -4.5
+   ]
+  }
+ ],
+ "colours": {
+  "keybed": [
+   172,
+   178,
+   176
+  ],
+  "front": {
+   "top": [
+    150,
+    164,
+    172
+   ],
+   "bottom": [
+    108,
+    122,
+    132
+   ],
+   "seam_dark": [
+    92,
+    104,
+    114
+   ],
+   "seam_light": [
+    176,
+    188,
+    196
+   ]
+  },
+  "light": {
+   "top": [
+    194,
+    196,
+    200
+   ],
+   "bottom": [
+    158,
+    160,
+    166
+   ],
+   "legend": [
+    30,
+    32,
+    36
+   ]
+  },
+  "dark": {
+   "top": [
+    92,
+    98,
+    108
+   ],
+   "bottom": [
+    52,
+    56,
+    64
+   ],
+   "legend": [
+    236,
+    240,
+    244
+   ]
+  },
+  "2nd-outlined": {
+   "top": [
+    92,
+    98,
+    108
+   ],
+   "bottom": [
+    52,
+    56,
+    64
+   ],
+   "legend": [
+    236,
+    240,
+    244
+   ]
+  },
+  "blue": {
+   "top": [
+    78,
+    118,
+    176
+   ],
+   "bottom": [
+    40,
+    72,
+    124
+   ],
+   "legend": [
+    206,
+    212,
+    220
+   ]
+  },
+  "grey": [
+   58,
+   60,
+   62
+  ],
+  "purple": [
+   96,
+   84,
+   156
+  ],
+  "purple-badge": {
+   "fill": [
+    104,
+    90,
+    170
+   ],
+   "text": [
+    240,
+    240,
+    248
+   ]
+  }
+ },
+ "keys": [
+  {
+   "id": "esc",
+   "row": 1,
+   "kind": "esc",
+   "shape": "pill",
+   "x": 82.59,
+   "y": 34.7,
+   "w": 75.2,
+   "h": 35.1,
+   "measured": {
+    "x": 82.59,
+    "y": 34.7
+   },
+   "colour": "dark",
+   "code": "ESC",
+   "legend": {
+    "text": "ESC",
+    "size": 18.5,
+    "dy": -1.0
+   },
+   "secondary": []
+  },
+  {
+   "id": "digit_1",
+   "row": 1,
+   "kind": "digit",
+   "shape": "pill",
+   "x": 171.43,
+   "y": 34.7,
+   "w": 62.9,
+   "h": 35.1,
+   "measured": {
+    "x": 171.43,
+    "y": 34.7
+   },
+   "colour": "dark",
+   "code": "DIGIT_1",
+   "legend": {
+    "text": "1",
+    "size": 21.0,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "!",
+     "colour": "grey",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "digit_2",
+   "row": 1,
+   "kind": "digit",
+   "shape": "pill",
+   "x": 254.96,
+   "y": 34.7,
+   "w": 62.9,
+   "h": 35.1,
+   "measured": {
+    "x": 254.96,
+    "y": 34.7
+   },
+   "colour": "dark",
+   "code": "DIGIT_2",
+   "legend": {
+    "text": "2",
+    "size": 21.0,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "@",
+     "colour": "grey",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "digit_3",
+   "row": 1,
+   "kind": "digit",
+   "shape": "pill",
+   "x": 338.49,
+   "y": 34.7,
+   "w": 62.9,
+   "h": 35.1,
+   "measured": {
+    "x": 338.49,
+    "y": 34.7
+   },
+   "colour": "dark",
+   "code": "DIGIT_3",
+   "legend": {
+    "text": "3",
+    "size": 21.0,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "#",
+     "colour": "grey",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "digit_4",
+   "row": 1,
+   "kind": "digit",
+   "shape": "pill",
+   "x": 422.02,
+   "y": 34.7,
+   "w": 62.9,
+   "h": 35.1,
+   "measured": {
+    "x": 422.02,
+    "y": 34.7
+   },
+   "colour": "dark",
+   "code": "DIGIT_4",
+   "legend": {
+    "text": "4",
+    "size": 21.0,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "$",
+     "colour": "grey",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "digit_5",
+   "row": 1,
+   "kind": "digit",
+   "shape": "pill",
+   "x": 505.55,
+   "y": 34.7,
+   "w": 62.9,
+   "h": 35.1,
+   "measured": {
+    "x": 505.55,
+    "y": 34.7
+   },
+   "colour": "dark",
+   "code": "DIGIT_5",
+   "legend": {
+    "text": "5",
+    "size": 21.0,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "%",
+     "colour": "grey",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "digit_6",
+   "row": 1,
+   "kind": "digit",
+   "shape": "pill",
+   "x": 589.08,
+   "y": 34.7,
+   "w": 62.9,
+   "h": 35.1,
+   "measured": {
+    "x": 589.08,
+    "y": 34.7
+   },
+   "colour": "dark",
+   "code": "DIGIT_6",
+   "legend": {
+    "text": "6",
+    "size": 21.0,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "^",
+     "colour": "grey",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "digit_7",
+   "row": 1,
+   "kind": "digit",
+   "shape": "pill",
+   "x": 672.61,
+   "y": 34.7,
+   "w": 62.9,
+   "h": 35.1,
+   "measured": {
+    "x": 672.61,
+    "y": 34.7
+   },
+   "colour": "dark",
+   "code": "DIGIT_7",
+   "legend": {
+    "text": "7",
+    "size": 21.0,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "&",
+     "colour": "grey",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "digit_8",
+   "row": 1,
+   "kind": "digit",
+   "shape": "pill",
+   "x": 756.14,
+   "y": 34.7,
+   "w": 62.9,
+   "h": 35.1,
+   "measured": {
+    "x": 756.14,
+    "y": 34.7
+   },
+   "colour": "dark",
+   "code": "DIGIT_8",
+   "legend": {
+    "text": "8",
+    "size": 21.0,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "*",
+     "colour": "grey",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "digit_9",
+   "row": 1,
+   "kind": "digit",
+   "shape": "pill",
+   "x": 839.67,
+   "y": 34.7,
+   "w": 62.9,
+   "h": 35.1,
+   "measured": {
+    "x": 839.67,
+    "y": 34.7
+   },
+   "colour": "dark",
+   "code": "DIGIT_9",
+   "legend": {
+    "text": "9",
+    "size": 21.0,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "(",
+     "colour": "grey",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "digit_0",
+   "row": 1,
+   "kind": "digit",
+   "shape": "pill",
+   "x": 923.2,
+   "y": 34.7,
+   "w": 62.9,
+   "h": 35.1,
+   "measured": {
+    "x": 923.2,
+    "y": 34.7
+   },
+   "colour": "dark",
+   "code": "DIGIT_0",
+   "legend": {
+    "text": "0",
+    "size": 21.0,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": ")",
+     "colour": "grey",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "q",
+   "row": 2,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 57.42,
+   "y": 89.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 57.42,
+    "y": 89.3
+   },
+   "colour": "light",
+   "code": "Q",
+   "legend": {
+    "text": "Q",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "+",
+     "colour": "purple",
+     "size": 16.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "w",
+   "row": 2,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 141.1,
+   "y": 89.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 141.1,
+    "y": 89.3
+   },
+   "colour": "light",
+   "code": "W",
+   "legend": {
+    "text": "W",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "-",
+     "colour": "purple",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "e",
+   "row": 2,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 224.79,
+   "y": 89.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 224.79,
+    "y": 89.3
+   },
+   "colour": "light",
+   "code": "E",
+   "legend": {
+    "text": "E",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "*",
+     "colour": "purple",
+     "size": 12.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "r",
+   "row": 2,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 308.47,
+   "y": 89.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 308.47,
+    "y": 89.3
+   },
+   "colour": "light",
+   "code": "R",
+   "legend": {
+    "text": "R",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "/",
+     "colour": "purple",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "t",
+   "row": 2,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 392.16,
+   "y": 89.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 392.16,
+    "y": 89.3
+   },
+   "colour": "light",
+   "code": "T",
+   "legend": {
+    "text": "T",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "=",
+     "colour": "purple",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "y",
+   "row": 2,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 475.84,
+   "y": 89.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 475.84,
+    "y": 89.3
+   },
+   "colour": "light",
+   "code": "Y",
+   "legend": {
+    "text": "Y",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": []
+  },
+  {
+   "id": "u",
+   "row": 2,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 559.52,
+   "y": 89.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 559.52,
+    "y": 89.3
+   },
+   "colour": "light",
+   "code": "U",
+   "legend": {
+    "text": "U",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": []
+  },
+  {
+   "id": "i",
+   "row": 2,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 643.21,
+   "y": 89.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 643.21,
+    "y": 89.3
+   },
+   "colour": "light",
+   "code": "I",
+   "legend": {
+    "text": "I",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "?",
+     "colour": "purple",
+     "size": 13.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "o",
+   "row": 2,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 726.89,
+   "y": 89.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 726.89,
+    "y": 89.3
+   },
+   "colour": "light",
+   "code": "O",
+   "legend": {
+    "text": "O",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "\"",
+     "colour": "purple",
+     "size": 16.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "p",
+   "row": 2,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 810.58,
+   "y": 89.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 810.58,
+    "y": 89.3
+   },
+   "colour": "light",
+   "code": "P",
+   "legend": {
+    "text": "P",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": ";",
+     "colour": "purple",
+     "size": 14.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "del",
+   "row": 2,
+   "kind": "del",
+   "shape": "pill",
+   "x": 918.13,
+   "y": 89.3,
+   "w": 88.7,
+   "h": 38.0,
+   "measured": {
+    "x": 918.13,
+    "y": 89.3
+   },
+   "colour": "dark",
+   "code": "DEL",
+   "legend": {
+    "text": "DEL",
+    "icon": "backspace_arrow",
+    "size": 13.7,
+    "dy": -1.0
+   },
+   "secondary": []
+  },
+  {
+   "id": "a",
+   "row": 3,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 98.7,
+   "y": 138.1,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 98.7,
+    "y": 137.6
+   },
+   "colour": "light",
+   "code": "A",
+   "legend": {
+    "text": "A",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": []
+  },
+  {
+   "id": "s",
+   "row": 3,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 182.51,
+   "y": 138.1,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 182.51,
+    "y": 137.6
+   },
+   "colour": "light",
+   "code": "S",
+   "legend": {
+    "text": "S",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "SEARCH",
+     "colour": "purple",
+     "size": 9.5,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "d",
+   "row": 3,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 266.32,
+   "y": 138.1,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 266.32,
+    "y": 137.6
+   },
+   "colour": "light",
+   "code": "D",
+   "legend": {
+    "text": "D",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": []
+  },
+  {
+   "id": "f",
+   "row": 3,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 350.13,
+   "y": 138.1,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 350.13,
+    "y": 137.6
+   },
+   "colour": "light",
+   "code": "F",
+   "legend": {
+    "text": "F",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "A⇌A",
+     "colour": "purple",
+     "size": 9.5,
+     "dx": 0.0,
+     "icon": "case_toggle"
+    }
+   ],
+   "homing_bar": {
+    "dy": 12.5,
+    "w": 13.5,
+    "h": 3.6
+   }
+  },
+  {
+   "id": "g",
+   "row": 3,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 433.95,
+   "y": 138.1,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 433.95,
+    "y": 137.6
+   },
+   "colour": "light",
+   "code": "G",
+   "legend": {
+    "text": "G",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": []
+  },
+  {
+   "id": "h",
+   "row": 3,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 517.76,
+   "y": 138.1,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 517.76,
+    "y": 137.6
+   },
+   "colour": "light",
+   "code": "H",
+   "legend": {
+    "text": "H",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": []
+  },
+  {
+   "id": "j",
+   "row": 3,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 601.57,
+   "y": 138.1,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 601.57,
+    "y": 137.6
+   },
+   "colour": "light",
+   "code": "J",
+   "legend": {
+    "text": "J",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "`",
+     "colour": "purple",
+     "size": 22.0,
+     "dx": 0.0
+    }
+   ],
+   "homing_bar": {
+    "dy": 12.5,
+    "w": 13.5,
+    "h": 3.6
+   }
+  },
+  {
+   "id": "k",
+   "row": 3,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 685.38,
+   "y": 138.1,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 685.38,
+    "y": 137.6
+   },
+   "colour": "light",
+   "code": "K",
+   "legend": {
+    "text": "K",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "´",
+     "colour": "purple",
+     "size": 22.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "l",
+   "row": 3,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 769.19,
+   "y": 138.1,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 769.19,
+    "y": 137.6
+   },
+   "colour": "light",
+   "code": "L",
+   "legend": {
+    "text": "L",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "~",
+     "colour": "purple",
+     "size": 17.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "enter_wide",
+   "row": 3,
+   "kind": "enter_wide",
+   "shape": "pill",
+   "x": 894.23,
+   "y": 138.1,
+   "w": 137.7,
+   "h": 36.9,
+   "measured": {
+    "x": 894.23,
+    "y": 137.6
+   },
+   "colour": "dark",
+   "code": "ENTER",
+   "legend": {
+    "icon": "return",
+    "size": 19.5,
+    "dy": -1.0
+   },
+   "secondary": []
+  },
+  {
+   "id": "shift_left",
+   "row": 4,
+   "kind": "shift",
+   "shape": "pill",
+   "x": 57.8,
+   "y": 187.3,
+   "w": 62.2,
+   "h": 36.6,
+   "measured": {
+    "x": 57.8,
+    "y": 186.3
+   },
+   "colour": "dark",
+   "code": "SHIFT",
+   "legend": {
+    "icon": "shift",
+    "size": 19.5,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "CAPS",
+     "colour": "purple",
+     "size": 9.5,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "z",
+   "row": 4,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 139.78,
+   "y": 187.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 139.78,
+    "y": 186.3
+   },
+   "colour": "light",
+   "code": "Z",
+   "legend": {
+    "text": "Z",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": []
+  },
+  {
+   "id": "x",
+   "row": 4,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 223.81,
+   "y": 187.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 223.81,
+    "y": 186.3
+   },
+   "colour": "light",
+   "code": "X",
+   "legend": {
+    "text": "X",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "CUT",
+     "colour": "purple",
+     "size": 9.5,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "c",
+   "row": 4,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 307.84,
+   "y": 187.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 307.84,
+    "y": 186.3
+   },
+   "colour": "light",
+   "code": "C",
+   "legend": {
+    "text": "C",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "COPY",
+     "colour": "purple",
+     "size": 9.5,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "v",
+   "row": 4,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 391.87,
+   "y": 187.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 391.87,
+    "y": 186.3
+   },
+   "colour": "light",
+   "code": "V",
+   "legend": {
+    "text": "V",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "PASTE",
+     "colour": "purple",
+     "size": 9.5,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "b",
+   "row": 4,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 475.9,
+   "y": 187.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 475.9,
+    "y": 186.3
+   },
+   "colour": "light",
+   "code": "B",
+   "legend": {
+    "text": "B",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "¨",
+     "colour": "purple",
+     "size": 16.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "n",
+   "row": 4,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 559.93,
+   "y": 187.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 559.93,
+    "y": 186.3
+   },
+   "colour": "light",
+   "code": "N",
+   "legend": {
+    "text": "N",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "^",
+     "colour": "purple",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "m",
+   "row": 4,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 643.96,
+   "y": 187.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 643.96,
+    "y": 186.3
+   },
+   "colour": "light",
+   "code": "M",
+   "legend": {
+    "text": "M",
+    "size": 23.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "ç",
+     "colour": "purple",
+     "size": 13.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "comma",
+   "row": 4,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 727.99,
+   "y": 187.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 727.99,
+    "y": 186.3
+   },
+   "colour": "light",
+   "code": "COMMA",
+   "legend": {
+    "text": ",",
+    "size": 30.0,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "ß",
+     "colour": "purple",
+     "size": 12.0,
+     "dx": -13.5
+    },
+    {
+     "text": "'",
+     "colour": "grey",
+     "size": 14.0,
+     "dx": 10.0
+    }
+   ]
+  },
+  {
+   "id": "period",
+   "row": 4,
+   "kind": "letter",
+   "shape": "pill",
+   "x": 812.02,
+   "y": 187.3,
+   "w": 63.5,
+   "h": 36.6,
+   "measured": {
+    "x": 812.02,
+    "y": 186.3
+   },
+   "colour": "light",
+   "code": "PERIOD",
+   "legend": {
+    "text": ".",
+    "size": 30.0,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "€",
+     "colour": "purple",
+     "size": 13.0,
+     "dx": -15.5
+    },
+    {
+     "text": ":",
+     "colour": "grey",
+     "size": 13.0,
+     "dx": 10.0
+    }
+   ]
+  },
+  {
+   "id": "shift_right",
+   "row": 4,
+   "kind": "shift",
+   "shape": "pill",
+   "x": 944.8,
+   "y": 187.3,
+   "w": 62.2,
+   "h": 36.6,
+   "measured": {
+    "x": 944.8,
+    "y": 186.3
+   },
+   "colour": "dark",
+   "code": "SHIFT",
+   "legend": {
+    "icon": "shift",
+    "size": 19.5,
+    "dy": -1.0
+   },
+   "secondary": []
+  },
+  {
+   "id": "fn_2nd",
+   "row": 5,
+   "kind": "function",
+   "shape": "pill",
+   "x": 63.16,
+   "y": 237.2,
+   "w": 63.0,
+   "h": 35.0,
+   "measured": {
+    "x": 63.16,
+    "y": 232.7
+   },
+   "colour": "2nd-outlined",
+   "code": "FN_2ND",
+   "legend": {
+    "text": "2nd",
+    "size": 19.5,
+    "dy": -1.0
+   },
+   "secondary": [],
+   "outline_ring": {
+    "gap": 4.6,
+    "thickness": 1.5,
+    "shadow_bias": 0.9,
+    "colour": "purple"
+   }
+  },
+  {
+   "id": "menu",
+   "row": 5,
+   "kind": "function",
+   "shape": "pill",
+   "x": 146.92,
+   "y": 237.2,
+   "w": 63.0,
+   "h": 35.0,
+   "measured": {
+    "x": 146.92,
+    "y": 232.7
+   },
+   "colour": "dark",
+   "code": "MENU",
+   "legend": {
+    "text": "MENU",
+    "size": 18.5,
+    "dy": -1.0,
+    "stretch": 0.95
+   },
+   "secondary": [
+    {
+     "text": "PC SYNC",
+     "colour": "purple-badge",
+     "size": 9.6,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "new",
+   "row": 5,
+   "kind": "function_wide",
+   "shape": "pill",
+   "x": 240.8,
+   "y": 237.2,
+   "w": 82.6,
+   "h": 35.0,
+   "measured": {
+    "x": 240.8,
+    "y": 232.7
+   },
+   "colour": "dark",
+   "code": "NEW",
+   "legend": {
+    "text": "NEW",
+    "size": 18.5,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "EDIT",
+     "colour": "purple",
+     "size": 9.5,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "smbl",
+   "row": 5,
+   "kind": "function",
+   "shape": "pill",
+   "x": 334.14,
+   "y": 237.2,
+   "w": 63.0,
+   "h": 35.0,
+   "measured": {
+    "x": 334.14,
+    "y": 232.7
+   },
+   "colour": "dark",
+   "code": "SMBL",
+   "legend": {
+    "icon": "box_down",
+    "size": 19.5,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "SMBL",
+     "colour": "purple",
+     "size": 9.5,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "space",
+   "row": 5,
+   "kind": "space",
+   "shape": "pill",
+   "x": 481.14,
+   "y": 237.2,
+   "w": 184.4,
+   "h": 35.0,
+   "measured": {
+    "x": 481.14,
+    "y": 232.7
+   },
+   "colour": "light",
+   "code": "SPACE",
+   "legend": {
+    "text": "SPACE",
+    "size": 18.5,
+    "dy": -1.2
+   },
+   "secondary": [
+    {
+     "text": "✓",
+     "colour": "purple",
+     "size": 15.0,
+     "dx": 0.0,
+     "icon": "check"
+    }
+   ]
+  },
+  {
+   "id": "minus",
+   "row": 5,
+   "kind": "function",
+   "shape": "pill",
+   "x": 627.8,
+   "y": 237.2,
+   "w": 63.0,
+   "h": 35.0,
+   "measured": {
+    "x": 627.8,
+    "y": 232.7
+   },
+   "colour": "dark",
+   "code": "MINUS",
+   "legend": {
+    "text": "−",
+    "size": 26.0,
+    "dy": -1.0
+   },
+   "secondary": [
+    {
+     "text": "_",
+     "colour": "grey",
+     "size": 15.0,
+     "dx": 0.0
+    }
+   ]
+  },
+  {
+   "id": "enter",
+   "row": 5,
+   "kind": "function_wide",
+   "shape": "pill",
+   "x": 721.65,
+   "y": 237.2,
+   "w": 82.6,
+   "h": 35.0,
+   "measured": {
+    "x": 721.65,
+    "y": 232.7
+   },
+   "colour": "dark",
+   "code": "ENTER",
+   "legend": {
+    "text": "ENTER",
+    "size": 17.8,
+    "dy": -1.0
+   },
+   "secondary": []
+  },
+  {
+   "id": "up",
+   "row": 5,
+   "kind": "cursor",
+   "shape": "d_key",
+   "x": 878.65,
+   "y": 207.0,
+   "w": 35.0,
+   "h": 35.0,
+   "round_side": "up",
+   "depth": 28.38,
+   "exponent": 1.9,
+   "corner": 3.5,
+   "measured": {
+    "x": 878.65,
+    "y": 202.5
+   },
+   "colour": "blue",
+   "code": "UP",
+   "legend": {
+    "icon": "triangle_up",
+    "size": 0.0,
+    "dy": -1.0
+   },
+   "secondary": []
+  },
+  {
+   "id": "left",
+   "row": 5,
+   "kind": "cursor",
+   "shape": "d_key",
+   "x": 840.65,
+   "y": 245.0,
+   "w": 35.0,
+   "h": 35.0,
+   "round_side": "left",
+   "depth": 28.38,
+   "exponent": 1.9,
+   "corner": 3.5,
+   "measured": {
+    "x": 840.65,
+    "y": 240.5
+   },
+   "colour": "blue",
+   "code": "LEFT",
+   "legend": {
+    "icon": "triangle_left",
+    "size": 0.0,
+    "dy": -1.0
+   },
+   "secondary": []
+  },
+  {
+   "id": "down",
+   "row": 5,
+   "kind": "cursor",
+   "shape": "d_key",
+   "x": 878.65,
+   "y": 245.0,
+   "w": 35.0,
+   "h": 35.0,
+   "round_side": "down",
+   "depth": 28.38,
+   "exponent": 1.9,
+   "corner": 3.5,
+   "measured": {
+    "x": 878.65,
+    "y": 240.5
+   },
+   "colour": "blue",
+   "code": "DOWN",
+   "legend": {
+    "icon": "triangle_down",
+    "size": 0.0,
+    "dy": -1.0
+   },
+   "secondary": []
+  },
+  {
+   "id": "right",
+   "row": 5,
+   "kind": "cursor",
+   "shape": "d_key",
+   "x": 916.65,
+   "y": 245.0,
+   "w": 35.0,
+   "h": 35.0,
+   "round_side": "right",
+   "depth": 28.38,
+   "exponent": 1.9,
+   "corner": 3.5,
+   "measured": {
+    "x": 916.65,
+    "y": 240.5
+   },
+   "colour": "blue",
+   "code": "RIGHT",
+   "legend": {
+    "icon": "triangle_right",
+    "size": 0.0,
+    "dy": -1.0
+   },
+   "secondary": []
+  }
+ ]
+}
