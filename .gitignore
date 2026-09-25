@@ -4,3 +4,4 @@ headless
 rom/
 data/
 apps/
+.DS_Store
