@@ -54,10 +54,10 @@ const float SIDE_KEY_CORNER = 6.0f;
 const uint64_t REPEAT_DELAY_MS = 400;
 const uint64_t REPEAT_RATE_MS = 80;
 
-const ImU32 BEZEL = IM_COL32(182, 190, 194, 255);
+const ImU32 BEZEL = IM_COL32(178, 189, 199, 255);
 const ImU32 BEZEL_EDGE = IM_COL32(112, 120, 126, 255);
 const ImU32 BEZEL_LIGHT = IM_COL32(226, 232, 236, 255);
-const ImU32 FRAME = IM_COL32(196, 204, 208, 255);
+const ImU32 FRAME = IM_COL32(192, 203, 213, 255);
 const ImU32 LABEL = IM_COL32(236, 240, 244, 255);
 const ImU32 PRINT = IM_COL32(52, 58, 64, 255);
 const ImU32 ICON_BLUE = IM_COL32(96, 172, 226, 255);
@@ -1301,7 +1301,7 @@ void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, bool wear) {
     Shape seam_light = translated(seam, ImVec2(0, 0.8f * k));
     draw->AddPolyline(seam_light.data(), (int)seam_light.size(), faded(KB_SEAM_LIGHT, 0.6f), 0, 0.6f * k);
 
-    fill(draw, face, lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(156, 164, 166, 255), 0.35f));
+    fill(draw, face, lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(152, 163, 171, 255), 0.35f));
     if (grime_texture) {
         ImRect box = bounds(face);
         draw->AddImageRounded((ImTextureID)(intptr_t)grime_texture, box.Min, box.Max, ImVec2(0, 0), ImVec2(1, 1),
@@ -1331,7 +1331,7 @@ void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, bool wear) {
                 SCOOP_RECESS, k, Mask(), FINGER_SCOOP);
     {
         ImVec2 centre = frame.at(KB_WELL_X, KB_WELL_Y);
-        ImU32 shell = mix(lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(156, 164, 166, 255), 0.35f), 0.8f);
+        ImU32 shell = mix(lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(152, 163, 171, 255), 0.35f), 0.8f);
         draw_slope_ring(draw, centre, KB_WELL_R * k, KB_WELL_SLOPE * k, shell);
     }
 }
