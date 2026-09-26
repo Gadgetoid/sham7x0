@@ -9,6 +9,7 @@
 #include "lcd.h"
 #include "machine.h"
 #include "runtime.h"
+#include "serial.h"
 #include "wzd.h"
 
 #define KEYCODE_TABLE      0x23a3
@@ -111,6 +112,8 @@ static uint32_t last_save_ms = 0;
 static uint64_t sound_cursor = 0;
 static float sound_frequency = 0;
 static machine_lcd_t shown_lcd = { true, DEFAULT_CONTRAST, false };
+static serial_bridge_t *serial = NULL;
+static char serial_target[512] = "";
 
 static void log_to_console(const char *message) {
     console_notice(message);
@@ -447,6 +450,32 @@ bool runtime_install_wzd(const char *path) {
     return installed;
 }
 
+bool runtime_set_serial(const char *target) {
+    if (serial) {
+        serial_attach(NULL, machine);
+        serial_close(serial);
+        serial = NULL;
+        serial_target[0] = 0;
+    }
+    if (!target) {
+        console_notice("serial off");
+        return true;
+    }
+    char description[640];
+    bool pty = strcmp(target, "pty") == 0;
+    serial = machine ? serial_open(pty ? NULL : target, description, sizeof description) : NULL;
+    if (!machine) snprintf(description, sizeof description, "no machine");
+    console_notice(description);
+    if (!serial) return false;
+    snprintf(serial_target, sizeof serial_target, "%s", target);
+    serial_attach(serial, machine);
+    return true;
+}
+
+const char *runtime_serial_target(void) {
+    return serial_target;
+}
+
 static void run_command(const char *line) {
     char message[128];
     if (strcmp(line, "reset") == 0) {
@@ -463,13 +492,18 @@ static void run_command(const char *line) {
         console_notice(message);
     } else if (strncmp(line, "install ", 8) == 0) {
         runtime_install_wzd(line + 8);
+    } else if (strcmp(line, "serial") == 0) {
+        snprintf(message, sizeof message, "serial %s", serial_target[0] ? serial_target : "off");
+        console_notice(message);
+    } else if (strncmp(line, "serial ", 7) == 0) {
+        runtime_set_serial(strcmp(line + 7, "off") == 0 ? NULL : line + 7);
     } else if (strcmp(line, "save") == 0) {
         save_state();
         console_notice(persist ? "saved" : "persistence is off");
     } else if (strcmp(line, "trace on") == 0 || strcmp(line, "trace off") == 0) {
         machine_set_trace_ports(machine, strcmp(line, "trace on") == 0);
     } else {
-        console_notice("commands: reset, init (reset holding ON), testmode (reset holding ESC+D), on, install PATH, save, pc, trace on, trace off");
+        console_notice("commands: reset, init (reset holding ON), testmode (reset holding ESC+D), on, install PATH, serial [DEVICE|LINK|pty|off], save, pc, trace on, trace off");
     }
 }
 
@@ -518,6 +552,7 @@ void runtime_step(void) {
         advance_keys(this_slice);
         uint64_t cycles = cycles_for_ms(emulated_ms + this_slice) - cycles_for_ms(emulated_ms);
         emulated_ms += this_slice;
+        if (serial) serial_poll(serial, machine);
         machine_run(machine, (uint32_t)cycles);
     }
     drain_sound();
@@ -563,6 +598,7 @@ void runtime_set_resume(const char *name) {
 }
 
 void runtime_deinit(void) {
+    if (serial) runtime_set_serial(NULL);
     save_state();
     machine_destroy(machine);
     machine = NULL;

@@ -33,7 +33,9 @@ Clicked keyboard keys go straight to the key matrix, so Shift, 2nd and CAPS beha
 
 Headless keys are `SECONDS:COLUMN.ROW/HOLD`. Column 99 is the ON key.
 
-`--serial[=LINK]` connects the UART to a pty (symlinked at `LINK`) and runs in real time; `--serial-log=FILE` records the traffic. PC SYNC (2nd, MENU) and WizTerm work against it.
+`--serial[=TARGET]` connects the UART. A character device such as `/dev/cu.usbmodem1101` is opened as a real serial port, and its baud rate follows the divisor the program sets (WizTerm defaults to 9600). Any other `TARGET` gets a pty symlinked there, and plain `--serial` gets an unlinked pty. Headless runs in real time with it, and `--serial-log=FILE` records the traffic. PC SYNC (2nd, MENU) and WizTerm work against it.
+
+In the emulator, pick a port from Emulation > Serial Port (the list of `/dev/cu.*` devices is refreshed each time it opens), pass `--serial[=TARGET]`, or type `serial TARGET`, `serial pty`, `serial off` or `serial` in the console.
 
 ```
 ./headless rom/r162.da1 --load=STATE --seconds=600 --serial=/tmp/wizard --keys=0.6:0.6/0.2,1.6:1.6/0.2

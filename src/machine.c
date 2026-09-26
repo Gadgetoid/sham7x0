@@ -443,6 +443,11 @@ static void uart_write(machine_t *machine, uint8_t index, uint8_t value) {
     }
 }
 
+unsigned machine_serial_baud(machine_t *machine) {
+    unsigned divisor = (unsigned)(machine->uart.divisor_low | machine->uart.divisor_high << 8);
+    return UART_CLOCK_BAUD / (divisor ? divisor : 0x10000);
+}
+
 void machine_set_serial_output(machine_t *machine, machine_serial_out_fn output, void *context) {
     machine->uart.output = output;
     machine->uart.output_context = context;

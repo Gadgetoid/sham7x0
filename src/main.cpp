@@ -51,6 +51,7 @@ struct Options {
     std::string data = "data";
     std::string apps = "apps";
     std::vector<std::string> install;
+    std::string serial;
     std::string screenshot;
     std::string keys;
     std::vector<std::string> exec;
@@ -162,6 +163,7 @@ static void usage() {
         "  --fresh             ignore and do not write the saved machine state\n"
         "  --apps=DIR          App Browser catalogue and where Install .wzd starts looking (default apps)\n"
         "  --install=FILE      install a .wzd program after boot, repeatable\n"
+        "  --serial[=TARGET]   connect the UART: a serial device such as /dev/cu.usbmodem1101, or a pty linked at TARGET\n"
         "  --size=WxH          window size (default 1400x900)\n"
         "  --dead-columns      simulate failed LCD column drivers\n"
         "  --no-console        start with the console hidden\n"
@@ -200,6 +202,8 @@ static bool parse_options(int argc, char **argv, Options &options) {
         else if (const char *v = value("--data=")) options.data = v;
         else if (const char *v = value("--apps=")) options.apps = v;
         else if (const char *v = value("--install=")) options.install.push_back(v);
+        else if (arg == "--serial") options.serial = "pty";
+        else if (const char *v = value("--serial=")) options.serial = v;
         else if (const char *v = value("--screenshot=")) options.screenshot = v;
         else if (const char *v = value("--frames=")) options.frames = atoi(v);
         else if (const char *v = value("--keys=")) options.keys = v;
@@ -585,6 +589,7 @@ int main(int argc, char **argv) {
     host_config_t config = { options.rom.c_str(), options.data.c_str(), persist };
     if (!runtime_init(&config)) return 1;
     for (auto &path : options.install) runtime_install_wzd(absolute(path).c_str());
+    if (!options.serial.empty()) runtime_set_serial(options.serial == "pty" ? "pty" : absolute(options.serial).c_str());
 
     for (auto &line : options.exec) console_submit(line.c_str());
     KeyScript script;
@@ -651,6 +656,9 @@ int main(int argc, char **argv) {
                 response = MENU_RESPONSE_VALUES[item - MENU_RESPONSE_FIRST];
                 lcd_set_response(response);
             }
+            if (item >= MENU_SERIAL_DEVICE_FIRST && item < MENU_SERIAL_DEVICE_END) {
+                if (const char *path = menu_serial_device(item)) runtime_set_serial(path);
+            }
             if (item >= MENU_LAYOUT_FIRST && item < MENU_LAYOUT_END) {
                 layout = item - MENU_LAYOUT_FIRST;
                 apply_layout();
@@ -670,6 +678,8 @@ int main(int argc, char **argv) {
                     break;
                 }
                 case MENU_APP_BROWSER:  browser_toggle(); break;
+                case MENU_SERIAL_OFF:   runtime_set_serial(nullptr); break;
+                case MENU_SERIAL_PTY:   runtime_set_serial("pty"); break;
                 case MENU_SHOW_CONSOLE:
                     show_console = !show_console;
                     set_console_visible(window, show_console, device, restore_height);
@@ -731,6 +741,7 @@ int main(int argc, char **argv) {
         menu_set_checked(MENU_SCRATCHES, device.scratches);
         menu_set_checked(MENU_WEAR, device.wear);
         menu_set_checked(MENU_TOUCHSCREEN, touch.active);
+        menu_set_serial(runtime_serial_target());
 
         script.click_x = io.DisplaySize.x * 0.5f;
         script.click_y = io.DisplaySize.y * 0.25f;

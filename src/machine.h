@@ -57,6 +57,7 @@ bool           machine_write_addin_slot(machine_t *machine, int slot, const uint
 uint8_t        machine_peek(machine_t *machine, uint16_t address);
 bool           machine_read_page(machine_t *machine, uint16_t page, uint8_t *out, size_t length);
 void           machine_set_serial_output(machine_t *machine, machine_serial_out_fn output, void *context);
+unsigned       machine_serial_baud(machine_t *machine);
 size_t         machine_serial_input(machine_t *machine, const uint8_t *data, size_t length);
 
 #ifdef __cplusplus

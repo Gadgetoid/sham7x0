@@ -28,7 +28,11 @@ enum {
     MENU_INSTALL_WZD,
     MENU_TEST_MODE,
     MENU_APP_BROWSER,
-    MENU_COUNT,
+    MENU_SERIAL_OFF,
+    MENU_SERIAL_PTY,
+    MENU_SERIAL_DEVICE_FIRST,
+    MENU_SERIAL_DEVICE_END = MENU_SERIAL_DEVICE_FIRST + 32,
+    MENU_COUNT = MENU_SERIAL_DEVICE_END,
 };
 
 static const int MENU_FPS_VALUES[] = { 0, 60, 30, 20, 15, 10 };
@@ -39,6 +43,8 @@ void menu_ensure(void);
 void menu_perform(int item);
 int  menu_poll(void);
 void menu_set_checked(int item, bool checked);
+void menu_set_serial(const char *target);
+const char *menu_serial_device(int item);
 
 #ifdef __cplusplus
 }

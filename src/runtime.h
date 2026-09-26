@@ -21,6 +21,8 @@ bool        runtime_keyboard_latched(const char *id);
 void        runtime_initialize_memory(void);
 void        runtime_enter_test_mode(void);
 bool        runtime_install_wzd(const char *path);
+bool        runtime_set_serial(const char *target);
+const char *runtime_serial_target(void);
 void        runtime_deinit(void);
 
 #ifdef __cplusplus

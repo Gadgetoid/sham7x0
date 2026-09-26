@@ -1,6 +1,7 @@
 #import <Cocoa/Cocoa.h>
 
 #include "menu.h"
+#include "serial.h"
 #include "touch.h"
 
 #define MENU_QUEUE 32
@@ -9,16 +10,24 @@ static int queue[MENU_QUEUE];
 static int queued = 0;
 static NSMenuItem *items[MENU_COUNT];
 
-@interface PocketMenuTarget : NSObject
+static char serial_devices[MENU_SERIAL_DEVICE_END - MENU_SERIAL_DEVICE_FIRST][64];
+static int serial_device_count = 0;
+static char serial_current[512] = "";
+
+@interface PocketMenuTarget : NSObject <NSMenuDelegate>
 @end
+
+static PocketMenuTarget *target = nil;
+static void rebuild_serial_menu(NSMenu *menu);
 
 @implementation PocketMenuTarget
 - (void)fire:(NSMenuItem *)item {
     if (queued < MENU_QUEUE) queue[queued++] = (int)item.tag;
 }
+- (void)menuNeedsUpdate:(NSMenu *)menu {
+    rebuild_serial_menu(menu);
+}
 @end
-
-static PocketMenuTarget *target = nil;
 static NSMenuItem *holders[4];
 static int holder_count = 0;
 
@@ -54,6 +63,39 @@ static void attach_menus(void) {
     }
 }
 
+
+static void add_serial_item(NSMenu *menu, int tag, NSString *title, bool checked) {
+    NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(fire:) keyEquivalent:@""];
+    item.target = target;
+    item.tag = tag;
+    item.state = checked ? NSControlStateValueOn : NSControlStateValueOff;
+    [menu addItem:item];
+}
+
+static void rebuild_serial_menu(NSMenu *menu) {
+    [menu removeAllItems];
+    serial_device_count = serial_list_devices(serial_devices, MENU_SERIAL_DEVICE_END - MENU_SERIAL_DEVICE_FIRST);
+    bool on_device = false;
+    for (int i = 0; i < serial_device_count; i++) on_device |= strcmp(serial_current, serial_devices[i]) == 0;
+    add_serial_item(menu, MENU_SERIAL_OFF, @"Off", serial_current[0] == 0);
+    NSString *virtual_title = @"Virtual Port (pty)";
+    if (serial_current[0] && !on_device && strcmp(serial_current, "pty") != 0) virtual_title = [NSString stringWithFormat:@"Virtual Port at %s", serial_current];
+    add_serial_item(menu, MENU_SERIAL_PTY, virtual_title, serial_current[0] && !on_device);
+    if (serial_device_count) [menu addItem:[NSMenuItem separatorItem]];
+    for (int i = 0; i < serial_device_count; i++) {
+        const char *name = serial_devices[i] + strlen("/dev/cu.");
+        add_serial_item(menu, MENU_SERIAL_DEVICE_FIRST + i, [NSString stringWithUTF8String:name], strcmp(serial_current, serial_devices[i]) == 0);
+    }
+}
+
+void menu_set_serial(const char *current) {
+    snprintf(serial_current, sizeof serial_current, "%s", current ? current : "");
+}
+
+const char *menu_serial_device(int item) {
+    int index = item - MENU_SERIAL_DEVICE_FIRST;
+    return index >= 0 && index < serial_device_count ? serial_devices[index] : NULL;
+}
 
 static NSMenu *submenu(NSMenu *parent, NSString *title) {
     NSMenu *menu = [[NSMenu alloc] initWithTitle:title];
@@ -95,6 +137,9 @@ void menu_install(void) {
     NSMenu *emulation = add_menu(@"Emulation");
     add_item(emulation, MENU_BACKLIGHT, @"Backlight", @"b", NSEventModifierFlagCommand);
     add_item(emulation, MENU_SOUND, @"Sound", @"", 0);
+    NSMenu *serial = submenu(emulation, @"Serial Port");
+    serial.delegate = target;
+    rebuild_serial_menu(serial);
     [emulation addItem:[NSMenuItem separatorItem]];
     NSMenu *rate = submenu(emulation, @"Frame Rate");
     NSString *rates[] = { @"Unlimited", @"60 fps", @"30 fps", @"20 fps", @"15 fps", @"10 fps" };
