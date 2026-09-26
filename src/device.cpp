@@ -438,6 +438,37 @@ void draw_slope_ring(ImDrawList *draw, ImVec2 centre, float radius, float slope,
     draw->AddPolyline(rim.data(), (int)rim.size(), IM_COL32(80, 88, 94, 90), ImDrawFlags_Closed, 0.6f);
 }
 
+std::vector<int> ear_clip(const Shape &polygon) {
+    std::vector<int> result;
+    std::vector<int> indices;
+    for (int i = 0; i < (int)polygon.size(); i++) indices.push_back(i);
+    float orientation = signed_area(polygon) > 0 ? 1.0f : -1.0f;
+    auto turn = [&](ImVec2 a, ImVec2 b, ImVec2 c) { return ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) * orientation; };
+    while (indices.size() > 3) {
+        int count = (int)indices.size();
+        int ear = -1;
+        for (int k = 0; k < count && ear < 0; k++) {
+            ImVec2 a = polygon[indices[(k + count - 1) % count]], b = polygon[indices[k]], c = polygon[indices[(k + 1) % count]];
+            if (turn(a, b, c) <= 0) continue;
+            bool empty = true;
+            for (int j = 0; j < count && empty; j++) {
+                int other = indices[j];
+                if (j == k || j == (k + 1) % count || j == (k + count - 1) % count) continue;
+                ImVec2 p = polygon[other];
+                empty = !(turn(a, b, p) > 0 && turn(b, c, p) > 0 && turn(c, a, p) > 0);
+            }
+            if (empty) ear = k;
+        }
+        if (ear < 0) ear = 0;
+        result.push_back(indices[(ear + count - 1) % count]);
+        result.push_back(indices[ear]);
+        result.push_back(indices[(ear + 1) % count]);
+        indices.erase(indices.begin() + ear);
+    }
+    if (indices.size() == 3) result.insert(result.end(), indices.begin(), indices.end());
+    return result;
+}
+
 void draw_recess(ImDrawList *draw, const Shape &shape, const RecessStyle &style, float u, Mask mask = Mask(),
                  const RecessPalette &palette = LID_RECESS) {
     const int inner_rings = 6;
@@ -483,18 +514,23 @@ void draw_recess(ImDrawList *draw, const Shape &shape, const RecessStyle &style,
         }
     }
     ImDrawIdx centre = (ImDrawIdx)draw->_VtxCurrentIdx;
+    Shape floor;
     for (size_t i = 0; i < count; i++) {
         ImVec2 point = shape[i] - normals[i] * inner;
+        floor.push_back(point);
         draw->PrimWriteVtx(point, uv, shaded(floor_colour(point), point));
     }
-    for (size_t i = 1; i + 1 < count; i++) {
-        draw->PrimWriteIdx(centre); draw->PrimWriteIdx((ImDrawIdx)(centre + i)); draw->PrimWriteIdx((ImDrawIdx)(centre + i + 1));
-    }
+    std::vector<int> triangles = ear_clip(floor);
+    for (int index : triangles) draw->PrimWriteIdx((ImDrawIdx)(centre + index));
+    for (size_t i = triangles.size(); i < (count - 2) * 3; i++) draw->PrimWriteIdx(centre);
 }
 
 float bezel_brightness(float x, const ImVec2 &lcd_min, const ImVec2 &lcd_max, float u) {
-    static const float left_profile[][2] = { { -202, 0.80f }, { -192, 0.98f }, { -182, 1.07f }, { -150, 1.03f }, { -60, 0.97f }, { 0, 0.94f } };
-    static const float right_profile[][2] = { { 0, 0.94f }, { 60, 0.97f }, { 170, 1.03f }, { 196, 1.07f }, { 206, 0.98f }, { 214, 0.80f } };
+    const float left = LEFT_EXTENT, right = RIGHT_EXTENT;
+    const float left_profile[][2] = { { -left, 0.80f }, { -left + 10, 0.98f }, { -left + 20, 1.07f }, { -left * 0.74f, 1.03f },
+                                      { -left * 0.30f, 0.97f }, { 0, 0.94f } };
+    const float right_profile[][2] = { { 0, 0.94f }, { right * 0.28f, 0.97f }, { right * 0.79f, 1.03f }, { right - 18, 1.07f },
+                                       { right - 8, 0.98f }, { right, 0.80f } };
     const float (*profile)[2];
     int count = 6;
     float at;
