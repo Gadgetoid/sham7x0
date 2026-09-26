@@ -9,6 +9,7 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "imgui_impl_sdlrenderer3.h"
 
 #include "device.h"
 #include "keyboard_layout.h"
@@ -80,8 +81,6 @@ const unsigned ICON_CALENDAR = 0xebcc;
 const unsigned ICON_NOTE = 0xf1fc;
 const unsigned ICON_LIGHT = 0xe518;
 const unsigned ICON_POWER = 0xe8ac;
-const unsigned ICON_UP = 0xe316;
-const unsigned ICON_DOWN = 0xe313;
 
 SDL_Texture *lcd_texture = nullptr;
 SDL_Texture *grime_texture = nullptr;
@@ -796,26 +795,85 @@ void finger_grime(ImDrawList *draw, const Shape &shape, float amount, float u) {
     }
 }
 
-void draw_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImVec2 device_max, DeviceState &state) {
+enum { LID_SIDE, LID_LIGHT = 5, LID_MENU, LID_POWER, LID_UP, LID_DOWN, LID_ESC, LID_ENTER, LID_KEY_COUNT };
+
+const char *const SIDE_NAMES[] = { "main", "tel", "cal", "memo", "prog" };
+
+struct LidLayout {
+    ImRect side_boxes[5];
+    Shape side[5];
+    ImRect light_box;
+    Shape light;
+    ImVec2 menu_centre, esc_centre, enter_centre;
+    Shape menu, esc, enter, power, up, down;
+    ImRect power_box;
+};
+
+LidLayout lid_layout(const Frame &frame) {
+    float u = frame.u;
+    LidLayout lid;
+    for (int index = 0; index < 5; index++) {
+        lid.side_boxes[index] = bounds(traced(frame, SIDE_NAMES[index]));
+        lid.side[index] = side_key(lid.side_boxes[index].Min, lid.side_boxes[index].Max, SIDE_KEY_CORNER * u);
+    }
+    lid.light_box = bounds(traced(frame, "light"));
+    lid.light = pill(lid.light_box.Min, lid.light_box.Max);
+    lid.menu_centre = frame.at(fit_menu[0], fit_menu[1], true);
+    lid.esc_centre = frame.at(fit_esc[0], fit_esc[1], true);
+    lid.enter_centre = frame.at(fit_enter[0], fit_enter[1], true);
+    lid.menu = circle(lid.menu_centre, fit_menu[2] * u);
+    lid.esc = circle(lid.esc_centre, fit_esc[2] * u);
+    lid.enter = circle(lid.enter_centre, fit_enter[2] * u);
+    lid.power = pill(frame.at(fit_power[0] - fit_power[2], fit_power[1] - fit_power[3], true),
+                     frame.at(fit_power[0] + fit_power[2], fit_power[1] + fit_power[3], true));
+    lid.power_box = bounds(lid.power);
+    lid.up = to_screen(frame, arrow_key(true), true);
+    lid.down = to_screen(frame, arrow_key(false), true);
+    return lid;
+}
+
+void input_lid_keys(const Frame &frame, DeviceState &state, uint8_t *down) {
     float u = frame.u;
     hit_pad = state.touch ? ImVec2(6.0f, 7.0f) * u : ImVec2(0, 0);
     bool live = state.powered;
+    LidLayout lid = lid_layout(frame);
+    const char *side_ids[] = { "key-main", "key-tel", "key-cal", "key-memo", "key-prog" };
+    for (int index = 0; index < 5; index++) {
+        bool pressed;
+        if (hit(side_ids[index], lid.side[index], pressed) && live) keys_push(HOST_KEY_F1 + index, 0);
+        down[LID_SIDE + index] = pressed;
+    }
+    bool pressed;
+    if (hit("key-light", lid.light, pressed)) lcd_set_backlight(!lcd_get_backlight());
+    down[LID_LIGHT] = pressed;
+    if (hit("key-menu", lid.menu, pressed) && live) keys_push(HOST_KEY_TAB, HOST_MOD_LID);
+    down[LID_MENU] = pressed;
+    if (hit("key-power", lid.power, pressed)) runtime_press_power();
+    down[LID_POWER] = pressed;
+    const char *arrow_ids[] = { "key-up", "key-down" };
+    const uint32_t arrow_codes[] = { HOST_KEY_UP, HOST_KEY_DOWN };
+    for (int index = 0; index < 2; index++) {
+        bool activated = hit(arrow_ids[index], index == 0 ? lid.up : lid.down, pressed);
+        if (!(live && second_arrow(arrow_codes[index], HOST_MOD_LID, activated, state))) {
+            repeat_key(repeats[index], arrow_codes[index], activated && live, pressed && live, HOST_MOD_LID);
+        }
+        down[LID_UP + index] = pressed;
+    }
+    if (hit("key-esc", lid.esc, pressed) && live) keys_push(HOST_KEY_ESC, HOST_MOD_LID);
+    down[LID_ESC] = pressed;
+    if (hit("key-enter", lid.enter, pressed) && live) keys_push(HOST_KEY_ENTER, HOST_MOD_LID);
+    down[LID_ENTER] = pressed;
+}
+
+void paint_lid_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImVec2 device_max, const uint8_t *down) {
+    float u = frame.u;
     ImVec2 press(0, 1.2f * u);
     auto dip = [&](bool pressed) { return pressed ? press : ImVec2(0, 0); };
-
-    const char *side_names[] = { "main", "tel", "cal", "memo", "prog" };
-    ImVec2 menu_centre = frame.at(fit_menu[0], fit_menu[1], true);
-    ImVec2 esc_centre = frame.at(fit_esc[0], fit_esc[1], true);
-    ImVec2 enter_centre = frame.at(fit_enter[0], fit_enter[1], true);
-    Shape power = pill(frame.at(fit_power[0] - fit_power[2], fit_power[1] - fit_power[3], true),
-                       frame.at(fit_power[0] + fit_power[2], fit_power[1] + fit_power[3], true));
-    ImRect power_box = bounds(power);
-    Shape up_key = to_screen(frame, arrow_key(true), true);
-    Shape down_key = to_screen(frame, arrow_key(false), true);
+    LidLayout lid = lid_layout(frame);
 
     draw->PushClipRect(device_min, device_max, true);
-    for (const char *name : side_names) {
-        ImRect box = bounds(traced(frame, name));
+    for (int index = 0; index < 5; index++) {
+        const ImRect &box = lid.side_boxes[index];
         float reach = box.GetHeight() * FLUTE_REACH;
         Shape scoop = side_key(ImVec2(box.Min.x - reach, box.Min.y - FLUTE_MARGIN * u),
                                ImVec2(box.Max.x + FLUTE_MARGIN * u, box.Max.y + FLUTE_MARGIN * u),
@@ -823,10 +881,10 @@ void draw_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImVec2 d
         draw_recess(draw, scoop, FLUTE_RECESS, u, Mask{ box.Min.x - reach, box.Min.x + box.GetHeight() * 0.2f });
     }
     {
-        float reach = power_box.GetHeight() * FLUTE_REACH;
-        Shape scoop = pill(power_box.Min - ImVec2(FLUTE_MARGIN, FLUTE_MARGIN) * u,
-                           ImVec2(power_box.Max.x + reach, power_box.Max.y + FLUTE_MARGIN * u));
-        draw_recess(draw, scoop, FLUTE_RECESS, u, Mask{ power_box.Max.x + reach, power_box.Max.x - power_box.GetHeight() * 0.2f });
+        float reach = lid.power_box.GetHeight() * FLUTE_REACH;
+        Shape scoop = pill(lid.power_box.Min - ImVec2(FLUTE_MARGIN, FLUTE_MARGIN) * u,
+                           ImVec2(lid.power_box.Max.x + reach, lid.power_box.Max.y + FLUTE_MARGIN * u));
+        draw_recess(draw, scoop, FLUTE_RECESS, u, Mask{ lid.power_box.Max.x + reach, lid.power_box.Max.x - lid.power_box.GetHeight() * 0.2f });
     }
     {
         Shape well = to_screen(frame, arrow_well(), true);
@@ -834,77 +892,43 @@ void draw_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImVec2 d
     }
     draw->PopClipRect();
     const float side_wear[] = { 0.7f, 0.45f, 0.45f, 0.5f, 1.0f };
+    for (int index = 0; index < 5; index++) finger_grime(draw, lid.side[index], side_wear[index], u);
+    finger_grime(draw, lid.menu, 1.0f, u);
+    finger_grime(draw, lid.power, 0.4f, u);
+    finger_grime(draw, lid.up, 0.8f, u);
+    finger_grime(draw, lid.down, 0.85f, u);
+    finger_grime(draw, lid.esc, 0.8f, u);
+    finger_grime(draw, lid.enter, 0.9f, u);
+
+    const char *side_text[] = { "MAIN", nullptr, nullptr, nullptr, "PROG" };
+    const unsigned side_glyph[] = { 0, ICON_CALL, ICON_CALENDAR, ICON_NOTE, 0 };
     for (int index = 0; index < 5; index++) {
-        ImRect box = bounds(traced(frame, side_names[index]));
-        finger_grime(draw, side_key(box.Min, box.Max, SIDE_KEY_CORNER * u), side_wear[index], u);
-    }
-    finger_grime(draw, circle(menu_centre, fit_menu[2] * u), 1.0f, u);
-    finger_grime(draw, power, 0.4f, u);
-    finger_grime(draw, up_key, 0.8f, u);
-    finger_grime(draw, down_key, 0.85f, u);
-    finger_grime(draw, circle(esc_centre, fit_esc[2] * u), 0.8f, u);
-    finger_grime(draw, circle(enter_centre, fit_enter[2] * u), 0.9f, u);
-
-    struct SideKey { const char *id; uint32_t code; const char *text; unsigned glyph; };
-    const SideKey side[] = {
-        { "key-main", HOST_KEY_F1, "MAIN", 0 }, { "key-tel", HOST_KEY_F1 + 1, nullptr, ICON_CALL },
-        { "key-cal", HOST_KEY_F1 + 2, nullptr, ICON_CALENDAR }, { "key-memo", HOST_KEY_F1 + 3, nullptr, ICON_NOTE },
-        { "key-prog", HOST_KEY_F1 + 4, "PROG", 0 },
-    };
-    for (int index = 0; index < 5; index++) {
-        ImRect box = bounds(traced(frame, side_names[index]));
-        Shape shape = side_key(box.Min, box.Max, SIDE_KEY_CORNER * u);
-        bool pressed;
-        if (hit(side[index].id, shape, pressed) && live) keys_push(side[index].code, 0);
-        draw_key(draw, shape, DARK_KEY, pressed, u);
-        ImVec2 at = bounds(shape).GetCenter() + ImVec2(2 * u, 0) + dip(pressed);
-        if (side[index].text) {
-            centred_text(draw, at, 17.0f * u, LABEL, side[index].text);
-        } else if (side[index].glyph) {
-            icon(draw, at, 44.0f * u, ICON_BLUE, side[index].glyph);
-        }
+        bool pressed = down[LID_SIDE + index];
+        draw_key(draw, lid.side[index], DARK_KEY, pressed, u);
+        ImVec2 at = bounds(lid.side[index]).GetCenter() + ImVec2(2 * u, 0) + dip(pressed);
+        if (side_text[index]) centred_text(draw, at, 17.0f * u, LABEL, side_text[index]);
+        else icon(draw, at, 44.0f * u, ICON_BLUE, side_glyph[index]);
     }
 
-    {
-        ImRect box = bounds(traced(frame, "light"));
-        Shape shape = pill(box.Min, box.Max);
-        draw_recess(draw, pill(box.Min - ImVec2(WELL_MARGIN, WELL_MARGIN) * u, box.Max + ImVec2(WELL_MARGIN, WELL_MARGIN) * u), KEY_WELL, u);
-        bool pressed;
-        if (hit("key-light", shape, pressed)) lcd_set_backlight(!lcd_get_backlight());
-        draw_key(draw, shape, TEAL_KEY, pressed, u);
-        icon(draw, box.GetCenter() + dip(pressed), 34.0f * u, LABEL, ICON_LIGHT);
-    }
+    draw_recess(draw, pill(lid.light_box.Min - ImVec2(WELL_MARGIN, WELL_MARGIN) * u, lid.light_box.Max + ImVec2(WELL_MARGIN, WELL_MARGIN) * u), KEY_WELL, u);
+    draw_key(draw, lid.light, TEAL_KEY, down[LID_LIGHT], u);
+    icon(draw, lid.light_box.GetCenter() + dip(down[LID_LIGHT]), 34.0f * u, LABEL, ICON_LIGHT);
 
-    {
-        erase_colour = faded(BEZEL, 0.9f);
-        rub_mode = false;
-        centred_text(draw, menu_centre - ImVec2(0, 39 * u), 15.0f * u, PRINT, "MENU");
-        draw_recess(draw, circle(menu_centre, (fit_menu[2] + WELL_MARGIN + 2.5f) * u), KEY_WELL, u);
-        Shape shape = circle(menu_centre, fit_menu[2] * u);
-        bool pressed;
-        if (hit("key-menu", shape, pressed) && live) keys_push(HOST_KEY_TAB, HOST_MOD_LID);
-        draw_key(draw, shape, DARK_DOMED_KEY, pressed, u);
-    }
+    erase_colour = faded(BEZEL, 0.9f);
+    rub_mode = false;
+    centred_text(draw, lid.menu_centre - ImVec2(0, 39 * u), 15.0f * u, PRINT, "MENU");
+    draw_recess(draw, circle(lid.menu_centre, (fit_menu[2] + WELL_MARGIN + 2.5f) * u), KEY_WELL, u);
+    draw_key(draw, lid.menu, DARK_DOMED_KEY, down[LID_MENU], u);
 
-    {
-        erase_colour = faded(BEZEL, 0.9f);
-        rub_mode = false;
-        centred_text(draw, ImVec2(power_box.GetCenter().x, menu_centre.y - 39 * u), 15.0f * u, PRINT, "POWER");
-        bool pressed;
-        if (hit("key-power", power, pressed)) runtime_press_power();
-        draw_key(draw, power, TEAL_KEY, pressed, u);
-        icon(draw, power_box.GetCenter() + dip(pressed), 32.0f * u, LABEL, ICON_POWER);
-    }
+    erase_colour = faded(BEZEL, 0.9f);
+    rub_mode = false;
+    centred_text(draw, ImVec2(lid.power_box.GetCenter().x, lid.menu_centre.y - 39 * u), 15.0f * u, PRINT, "POWER");
+    draw_key(draw, lid.power, TEAL_KEY, down[LID_POWER], u);
+    icon(draw, lid.power_box.GetCenter() + dip(down[LID_POWER]), 32.0f * u, LABEL, ICON_POWER);
 
-    struct ArrowKey { const char *id; const char *shape; uint32_t code; unsigned glyph; };
-    const ArrowKey arrows[] = { { "key-up", "up", HOST_KEY_UP, ICON_UP }, { "key-down", "down", HOST_KEY_DOWN, ICON_DOWN } };
     for (int index = 0; index < 2; index++) {
-        const Shape &shape = index == 0 ? up_key : down_key;
-        bool pressed;
-        bool activated = hit(arrows[index].id, shape, pressed);
-        if (!(live && second_arrow(arrows[index].code, HOST_MOD_LID, activated, state))) {
-            repeat_key(repeats[index], arrows[index].code, activated && live, pressed && live, HOST_MOD_LID);
-        }
+        const Shape &shape = index == 0 ? lid.up : lid.down;
+        bool pressed = down[LID_UP + index];
         draw_key(draw, shape, BLUE_KEY, pressed, u);
         ImRect box = bounds(shape);
         ImVec2 centre = ImVec2(box.GetCenter().x + 3.0f * u, box.GetCenter().y + (index == 0 ? 4.0f : -4.0f) * u) + dip(pressed);
@@ -914,21 +938,11 @@ void draw_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImVec2 d
         draw->AddPolyline(chevron, 3, IM_COL32(222, 228, 234, 235), 0, 2.6f * u);
     }
 
-    draw_recess(draw, capsule(esc_centre, (fit_esc[2] + 6) * u, enter_centre, (fit_enter[2] + 6) * u), FLAT_WELL, u);
-    {
-        Shape shape = circle(esc_centre, fit_esc[2] * u);
-        bool pressed;
-        if (hit("key-esc", shape, pressed) && live) keys_push(HOST_KEY_ESC, HOST_MOD_LID);
-        draw_key(draw, shape, DARK_KEY, pressed, u);
-        centred_text(draw, esc_centre + dip(pressed), 15.0f * u, LABEL, "ESC");
-    }
-    {
-        Shape shape = circle(enter_centre, fit_enter[2] * u);
-        bool pressed;
-        if (hit("key-enter", shape, pressed) && live) keys_push(HOST_KEY_ENTER, HOST_MOD_LID);
-        draw_key(draw, shape, DARK_KEY, pressed, u);
-        centred_text(draw, enter_centre + dip(pressed), 16.0f * u, LABEL, "ENTER");
-    }
+    draw_recess(draw, capsule(lid.esc_centre, (fit_esc[2] + 6) * u, lid.enter_centre, (fit_enter[2] + 6) * u), FLAT_WELL, u);
+    draw_key(draw, lid.esc, DARK_KEY, down[LID_ESC], u);
+    centred_text(draw, lid.esc_centre + dip(down[LID_ESC]), 15.0f * u, LABEL, "ESC");
+    draw_key(draw, lid.enter, DARK_KEY, down[LID_ENTER], u);
+    centred_text(draw, lid.enter_centre + dip(down[LID_ENTER]), 16.0f * u, LABEL, "ENTER");
 }
 
 const float HINGE = 30.0f;
@@ -1284,11 +1298,42 @@ void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, bool wear) {
     }
 }
 
-void draw_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, DeviceState &state) {
+const int KEYBOARD_KEY_COUNT = (int)(sizeof keyboard_keys / sizeof keyboard_keys[0]);
+
+void input_keyboard(const KeyboardFrame &frame, DeviceState &state, uint8_t *down) {
     float k = frame.kbu;
     bool live = state.powered;
-    draw_keybed(draw, frame, state.wear);
+    int cursor_index = 0;
+    for (int index = 0; index < KEYBOARD_KEY_COUNT; index++) {
+        const KeyboardKey &key = keyboard_keys[index];
+        Shape shape = keyboard_key_shape(frame, key);
+        if (state.touch) hit_pad = key.shape == KB_SHAPE_CURSOR ? ImVec2(4.0f, 4.0f) * k : ImVec2(9.0f, 5.5f) * k;
+        else hit_pad = ImVec2(0, 0);
+        char id[32];
+        snprintf(id, sizeof id, "kb-%s", key.id);
+        bool pressed;
+        bool activated = hit(id, shape, pressed);
+        bool raw = live && runtime_keyboard_key(key.id, pressed);
+        if (raw) {
+        } else if (key.shape == KB_SHAPE_CURSOR) {
+            KeyRepeat &repeat = keyboard_repeats[cursor_index++ % 4];
+            uint8_t select_mods = state.select ? HOST_MOD_SHIFT : 0;
+            if (!(live && second_arrow(key.code, select_mods, activated, state))) {
+                repeat_key(repeat, key.code, activated && live, pressed && live, select_mods);
+            }
+        } else if (activated && live) {
+            keyboard_press(key, state);
+        }
+        bool latched = raw ? runtime_keyboard_latched(key.id) : ((key.action == KB_ACTION_SECOND && state.second) ||
+                                (key.action == KB_ACTION_SHIFT && strcmp(key.id, "shift_right") == 0 && state.select) ||
+                                (key.action == KB_ACTION_SHIFT && (state.shift || state.caps)));
+        down[index] = pressed || latched;
+    }
+}
 
+void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const DeviceState &state, const uint8_t *down) {
+    float k = frame.kbu;
+    draw_keybed(draw, frame, state.wear);
     for (const KeyboardKey &key : keyboard_keys) {
         if (!key.ring) continue;
         Shape ring = outset(keyboard_key_shape(frame, key), 1.6f * u + 4.6f * k + 0.75f * k);
@@ -1312,33 +1357,13 @@ void draw_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, Device
         for (int index = 0; index < key.secondary_count; index++) keyboard_secondary(draw, frame, key, key.secondary[index]);
     }
 
-    int cursor_index = 0;
-    for (const KeyboardKey &key : keyboard_keys) {
+    for (int index = 0; index < KEYBOARD_KEY_COUNT; index++) {
+        const KeyboardKey &key = keyboard_keys[index];
         Shape shape = keyboard_key_shape(frame, key);
-        if (state.touch) hit_pad = key.shape == KB_SHAPE_CURSOR ? ImVec2(4.0f, 4.0f) * k : ImVec2(9.0f, 5.5f) * k;
-        else hit_pad = ImVec2(0, 0);
-        char id[32];
-        snprintf(id, sizeof id, "kb-%s", key.id);
-        bool pressed;
-        bool activated = hit(id, shape, pressed);
-        bool raw = live && runtime_keyboard_key(key.id, pressed);
-        if (raw) {
-        } else if (key.shape == KB_SHAPE_CURSOR) {
-            KeyRepeat &repeat = keyboard_repeats[cursor_index++ % 4];
-            uint8_t select_mods = state.select ? HOST_MOD_SHIFT : 0;
-            if (!(live && second_arrow(key.code, select_mods, activated, state))) {
-                repeat_key(repeat, key.code, activated && live, pressed && live, select_mods);
-            }
-        } else if (activated && live) {
-            keyboard_press(key, state);
-        }
-        bool latched = raw ? runtime_keyboard_latched(key.id) : ((key.action == KB_ACTION_SECOND && state.second) ||
-                                (key.action == KB_ACTION_SHIFT && strcmp(key.id, "shift_right") == 0 && state.select) ||
-                                (key.action == KB_ACTION_SHIFT && (state.shift || state.caps)));
-        bool down = pressed || latched;
+        bool key_down = down[index];
         ButtonStyle style = { KB_KEY_TOP[key.colour], KB_KEY_BOTTOM[key.colour], key.colour == KB_LIGHT ? 60 : 34, 1.6f, 1.0f,
                               0.0f };
-        float lift = down ? 0.0f : KEY_TRAVEL * k;
+        float lift = key_down ? 0.0f : KEY_TRAVEL * k;
         fill(draw, outset(shape, style.gap * u), IM_COL32(16, 20, 24, 215), IM_COL32(16, 20, 24, 170));
         style.gap = 0;
         if (lift > 0) {
@@ -1409,6 +1434,89 @@ void draw_hinge(ImDrawList *draw, ImVec2 device_min, ImVec2 device_max, float u)
     fill(draw, shine, IM_COL32(220, 226, 230, 90), IM_COL32(220, 226, 230, 0));
 }
 
+
+struct DeviceLayout {
+    ImVec2 device_min, device_max, image_min, image_max;
+    float u;
+    float rounding;
+    bool has_keyboard;
+};
+
+struct BakeKey {
+    ImVec2 origin, size;
+    float scale;
+    bool show_keys, has_keyboard, wear, focused;
+    std::vector<uint8_t> down;
+
+    bool operator==(const BakeKey &other) const {
+        return origin.x == other.origin.x && origin.y == other.origin.y && size.x == other.size.x && size.y == other.size.y &&
+               scale == other.scale && show_keys == other.show_keys && has_keyboard == other.has_keyboard && wear == other.wear &&
+               focused == other.focused && down == other.down;
+    }
+};
+
+SDL_Texture *bake_texture = nullptr;
+ImDrawList *bake_list = nullptr;
+BakeKey baked, pending;
+bool bake_pending = false;
+ImVec2 bake_min, bake_size;
+float bake_scale = 1.0f;
+
+KeyboardFrame keyboard_frame(const DeviceLayout &layout) {
+    float kbu = keyboard_unit_in_lid_units() * layout.u;
+    ImVec2 origin((layout.device_min.x + layout.device_max.x) * 0.5f - KB_WIDTH * kbu * 0.5f, layout.device_max.y + HINGE * layout.u + KB_PAD_TOP * kbu);
+    return KeyboardFrame{ origin, kbu };
+}
+
+void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_scale, const DeviceLayout &layout, const DeviceState &state,
+                  const uint8_t *down) {
+    ImVec2 device_min = layout.device_min, device_max = layout.device_max, image_min = layout.image_min, image_max = layout.image_max;
+    ImVec2 device_size = device_max - device_min;
+    float u = layout.u, rounding = layout.rounding;
+    if (layout.has_keyboard) draw_hinge(draw, device_min, device_max, u);
+    if (state.focused) {
+        draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
+    }
+    draw->AddRectFilled(device_min + ImVec2(0, 4), device_max + ImVec2(0, 4), IM_COL32(0, 0, 0, 90), rounding);
+    if (state.show_keys) shade_body(draw, device_min, device_max, rounding, image_min, image_max, u);
+    else draw->AddRectFilled(device_min, device_max, BEZEL, rounding);
+    build_grime(renderer, (int)(device_size.x * framebuffer_scale), (int)(device_size.y * framebuffer_scale), framebuffer_scale * u, state.wear);
+    wear_labels = state.wear;
+    wear_grime = state.wear;
+    draw->AddImageRounded((ImTextureID)(intptr_t)grime_texture, device_min, device_max, ImVec2(0, 0), ImVec2(1, 1),
+                          IM_COL32_WHITE, rounding);
+    load_scratches(renderer);
+    if (state.wear) case_scratches(draw, device_min, device_max, rounding, 0.0f);
+    if (!state.show_keys) draw->AddRectFilledMultiColor(device_min + ImVec2(rounding, 2), ImVec2(device_max.x - rounding, device_min.y + device_size.y * 0.45f),
+                                  IM_COL32(255, 255, 255, 40), IM_COL32(255, 255, 255, 40), IM_COL32(255, 255, 255, 0), IM_COL32(255, 255, 255, 0));
+    draw->AddRect(device_min, device_max, BEZEL_EDGE, rounding, 0, 2.0f);
+    draw->AddRect(device_min + ImVec2(2, 2), device_max - ImVec2(2, 2), BEZEL_LIGHT, rounding - 2, 0, 1.0f);
+
+    if (state.show_keys) {
+        ImVec2 frame_min = image_min - ImVec2(20, 18) * u, frame_max = image_max + ImVec2(20, 20) * u;
+        draw->AddRectFilled(frame_min, frame_max, FRAME, 12.0f * u);
+        draw->AddRect(frame_min, frame_max, BEZEL_LIGHT, 12.0f * u, 0, 1.5f);
+        draw->AddRect(frame_min + ImVec2(1, 1), frame_max + ImVec2(1, 1), BEZEL_EDGE, 12.0f * u, 0, 1.0f);
+    }
+    draw->AddRectFilled(image_min - ImVec2(5, 5), image_max + ImVec2(5, 5), IM_COL32(58, 64, 68, 255), 5.0f);
+    draw->AddRect(image_min - ImVec2(5, 5), image_max + ImVec2(5, 5), IM_COL32(210, 216, 220, 255), 5.0f, 0, 1.0f);
+    if (state.show_keys) {
+        float brand = 24.0f * u;
+        ImVec2 at = image_min + ImVec2(-4 * u, -50 * u);
+        erase_colour = faded(BEZEL, 0.9f);
+        rub_mode = false;
+        draw->AddText(text_font(), brand, at, PRINT, "SPORK");
+        wear_patch(draw, at, at + text_size(text_font(), brand, "SPORK"), 1);
+        draw->AddText(ImGui::GetFont(), 17.0f * u, at + ImVec2(text_size(text_font(), brand, "SPORK").x + 18 * u, 5 * u), PRINT, "ZQ-770");
+        paint_lid_keys(draw, Frame{ image_min, image_max, u }, device_min, device_max, down);
+        if (layout.has_keyboard) paint_keyboard(draw, keyboard_frame(layout), u, state, down + LID_KEY_COUNT);
+    } else {
+        draw->AddText(device_min + ImVec2(PLAIN_BEZEL, 8), IM_COL32(60, 66, 72, 255), "SPORK  ZQ-770");
+    }
+
+}
+
+
 }
 
 float device_fit_height(float width, const DeviceState &state) {
@@ -1476,34 +1584,35 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
     ImVec2 image_max = image_min + image_size;
     float rounding = state.show_keys ? 34.0f * u : 18.0f;
 
-    ImDrawList *draw = ImGui::GetWindowDrawList();
-    if (has_keyboard) draw_hinge(draw, device_min, device_max, u);
-    if (state.focused) {
-        draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
-    }
-    draw->AddRectFilled(device_min + ImVec2(0, 4), device_max + ImVec2(0, 4), IM_COL32(0, 0, 0, 90), rounding);
-    if (state.show_keys) shade_body(draw, device_min, device_max, rounding, image_min, image_max, u);
-    else draw->AddRectFilled(device_min, device_max, BEZEL, rounding);
-    build_grime(renderer, (int)(device_size.x * framebuffer_scale), (int)(device_size.y * framebuffer_scale), framebuffer_scale * u, state.wear);
-    wear_labels = state.wear;
-    wear_grime = state.wear;
-    draw->AddImageRounded((ImTextureID)(intptr_t)grime_texture, device_min, device_max, ImVec2(0, 0), ImVec2(1, 1),
-                          IM_COL32_WHITE, rounding);
-    load_scratches(renderer);
-    if (state.wear) case_scratches(draw, device_min, device_max, rounding, 0.0f);
-    if (!state.show_keys) draw->AddRectFilledMultiColor(device_min + ImVec2(rounding, 2), ImVec2(device_max.x - rounding, device_min.y + device_size.y * 0.45f),
-                                  IM_COL32(255, 255, 255, 40), IM_COL32(255, 255, 255, 40), IM_COL32(255, 255, 255, 0), IM_COL32(255, 255, 255, 0));
-    draw->AddRect(device_min, device_max, BEZEL_EDGE, rounding, 0, 2.0f);
-    draw->AddRect(device_min + ImVec2(2, 2), device_max - ImVec2(2, 2), BEZEL_LIGHT, rounding - 2, 0, 1.0f);
-
+    DeviceLayout layout = { device_min, device_max, image_min, image_max, u, rounding, has_keyboard };
+    ImGui::SetCursorScreenPos(image_min);
+    ImGui::InvisibleButton("device", image_size);
+    std::vector<uint8_t> down(LID_KEY_COUNT + KEYBOARD_KEY_COUNT, 0);
     if (state.show_keys) {
-        ImVec2 frame_min = image_min - ImVec2(20, 18) * u, frame_max = image_max + ImVec2(20, 20) * u;
-        draw->AddRectFilled(frame_min, frame_max, FRAME, 12.0f * u);
-        draw->AddRect(frame_min, frame_max, BEZEL_LIGHT, 12.0f * u, 0, 1.5f);
-        draw->AddRect(frame_min + ImVec2(1, 1), frame_max + ImVec2(1, 1), BEZEL_EDGE, 12.0f * u, 0, 1.0f);
+        input_lid_keys(Frame{ image_min, image_max, u }, state, down.data());
+        if (has_keyboard) input_keyboard(keyboard_frame(layout), state, down.data() + LID_KEY_COUNT);
     }
-    draw->AddRectFilled(image_min - ImVec2(5, 5), image_max + ImVec2(5, 5), IM_COL32(58, 64, 68, 255), 5.0f);
-    draw->AddRect(image_min - ImVec2(5, 5), image_max + ImVec2(5, 5), IM_COL32(210, 216, 220, 255), 5.0f, 0, 1.0f);
+
+    BakeKey key = { origin, ImVec2(avail_w, height), framebuffer_scale, state.show_keys, has_keyboard, state.wear, state.focused, down };
+    ImDrawList *draw = ImGui::GetWindowDrawList();
+    if (bake_texture && !bake_pending && key == baked) {
+        draw->AddImage((ImTextureID)(intptr_t)bake_texture, bake_min, bake_min + ImVec2((float)bake_texture->w, (float)bake_texture->h) / bake_scale);
+    } else {
+        paint_device(draw, renderer, framebuffer_scale, layout, state, down.data());
+        if (!bake_list) bake_list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
+        bake_list->_ResetForNewFrame();
+        bake_list->Flags = draw->Flags;
+        bake_list->_SetPixelDensity(draw->_InvFringeScale);
+        bake_list->PushClipRect(ImVec2(floorf(origin.x * framebuffer_scale), floorf(origin.y * framebuffer_scale)) / framebuffer_scale, origin + ImVec2(avail_w, height));
+        bake_list->PushTexture(ImGui::GetIO().Fonts->TexRef);
+        paint_device(bake_list, renderer, framebuffer_scale, layout, state, down.data());
+        bake_min = ImVec2(floorf(origin.x * framebuffer_scale), floorf(origin.y * framebuffer_scale)) / framebuffer_scale;
+        bake_size = origin + ImVec2(avail_w, height) - bake_min;
+        bake_scale = framebuffer_scale;
+        pending = key;
+        bake_pending = true;
+    }
+
     if (lcd_texture) draw->AddImage((ImTextureID)(intptr_t)lcd_texture, image_min, image_max);
     load_scratches(renderer);
     if (scratch_texture && state.scratches) {
@@ -1512,30 +1621,44 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
                        ImVec2(1, 0.5f + band * 0.5f), SCRATCH_TINT);
     }
 
-    ImGui::SetCursorScreenPos(image_min);
-    ImGui::InvisibleButton("device", image_size);
-
-    if (state.show_keys) {
-        float brand = 24.0f * u;
-        ImVec2 at = image_min + ImVec2(-4 * u, -50 * u);
-        erase_colour = faded(BEZEL, 0.9f);
-        rub_mode = false;
-        draw->AddText(text_font(), brand, at, PRINT, "SPORK");
-        wear_patch(draw, at, at + text_size(text_font(), brand, "SPORK"), 1);
-        draw->AddText(ImGui::GetFont(), 17.0f * u, at + ImVec2(text_size(text_font(), brand, "SPORK").x + 18 * u, 5 * u), PRINT, "ZQ-770");
-        draw_keys(draw, Frame{ image_min, image_max, u }, device_min, device_max, state);
-        if (has_keyboard) {
-            float kbu = keyboard_unit_in_lid_units() * u;
-            ImVec2 keyboard_origin((device_min.x + device_max.x) * 0.5f - KB_WIDTH * kbu * 0.5f, device_max.y + HINGE * u + KB_PAD_TOP * kbu);
-            draw_keyboard(draw, KeyboardFrame{ keyboard_origin, kbu }, u, state);
-        }
-    } else {
-        draw->AddText(device_min + ImVec2(PLAIN_BEZEL, 8), IM_COL32(60, 66, 72, 255), "SPORK  ZQ-770");
-    }
-
     ImGui::SetCursorScreenPos(origin + ImVec2(0, height));
     ImGui::Dummy(ImVec2(0, 0));
     return total_height;
+}
+
+void device_flush_bake(SDL_Renderer *renderer) {
+    if (!bake_pending || !bake_list) return;
+    bake_pending = false;
+    int width = (int)ceilf(bake_size.x * bake_scale), height = (int)ceilf(bake_size.y * bake_scale);
+    if (width <= 0 || height <= 0) return;
+    if (!bake_texture || bake_texture->w != width || bake_texture->h != height) {
+        if (bake_texture) SDL_DestroyTexture(bake_texture);
+        bake_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, width, height);
+        if (!bake_texture) return;
+        SDL_SetTextureScaleMode(bake_texture, SDL_SCALEMODE_NEAREST);
+    }
+    for (ImDrawVert &vertex : bake_list->VtxBuffer) vertex.pos -= bake_min;
+    for (ImDrawCmd &command : bake_list->CmdBuffer) command.ClipRect -= ImVec4(bake_min.x, bake_min.y, bake_min.x, bake_min.y);
+
+    ImDrawData data;
+    data.Valid = true;
+    data.CmdLists.push_back(bake_list);
+    data.CmdListsCount = 1;
+    data.TotalVtxCount = bake_list->VtxBuffer.Size;
+    data.TotalIdxCount = bake_list->IdxBuffer.Size;
+    data.DisplayPos = ImVec2(0, 0);
+    data.DisplaySize = bake_size;
+    data.FramebufferScale = ImVec2(bake_scale, bake_scale);
+
+    SDL_Texture *previous = SDL_GetRenderTarget(renderer);
+    SDL_SetRenderTarget(renderer, bake_texture);
+    SDL_SetRenderScale(renderer, bake_scale, bake_scale);
+    ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
+    SDL_SetRenderDrawColorFloat(renderer, background.x, background.y, background.z, 1.0f);
+    SDL_RenderClear(renderer);
+    ImGui_ImplSDLRenderer3_RenderDrawData(&data, renderer);
+    SDL_SetRenderTarget(renderer, previous);
+    baked = pending;
 }
 
 void device_set_label_font(ImFont *font) {
@@ -1558,4 +1681,8 @@ void device_shutdown(void) {
     grime_texture = nullptr;
     if (scratch_texture) SDL_DestroyTexture(scratch_texture);
     scratch_texture = nullptr;
+    if (bake_texture) SDL_DestroyTexture(bake_texture);
+    bake_texture = nullptr;
+    if (bake_list) IM_DELETE(bake_list);
+    bake_list = nullptr;
 }

@@ -861,6 +861,7 @@ int main(int argc, char **argv) {
         SDL_SetRenderDrawColor(renderer, 26, 28, 31, 255);
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+        device_flush_bake(renderer);
 
         frame++;
         if (!options.screenshot.empty() && frame >= options.frames) {
@@ -875,10 +876,10 @@ int main(int argc, char **argv) {
     runtime_deinit();
     beeper_deinit();
     browser_shutdown();
+    device_shutdown();
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
-    device_shutdown();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();

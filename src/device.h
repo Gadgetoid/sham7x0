@@ -21,6 +21,7 @@ struct DeviceState {
 float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height, float compose_seconds, DeviceState &state);
 float device_fit_height(float width, const DeviceState &state);
 void  device_shutdown(void);
+void  device_flush_bake(SDL_Renderer *renderer);
 void  device_set_label_font(ImFont *font);
 void  device_set_icon_font(ImFont *font);
 void  device_set_keyboard_fonts(ImFont *legend, ImFont *label);
