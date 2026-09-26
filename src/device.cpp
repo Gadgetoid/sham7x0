@@ -573,7 +573,6 @@ const RecessPalette LID_RECESS = { IM_COL32(104, 112, 118, 255), IM_COL32(238, 2
                                    IM_COL32(188, 195, 199, 255), IM_COL32(178, 186, 191, 255) };
 const RecessPalette FINGER_SCOOP = { IM_COL32(66, 76, 84, 255), IM_COL32(214, 224, 230, 255), IM_COL32(84, 96, 104, 255),
                                      IM_COL32(138, 150, 158, 255), IM_COL32(120, 132, 140, 255) };
-const float CURSOR_SLOPE = 3.4f;
 const ImU32 SLOPE_SHADE = IM_COL32(78, 86, 92, 255);
 const ImU32 SLOPE_LIT = IM_COL32(236, 240, 242, 255);
 const RecessStyle KEY_HOLE = { 0.6f, 1.4f, 1.0f };
@@ -1321,7 +1320,7 @@ void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, bool wear) {
     {
         ImVec2 centre = frame.at(KB_WELL_X, KB_WELL_Y);
         ImU32 shell = mix(lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(156, 164, 166, 255), 0.35f), 0.8f);
-        draw_slope_ring(draw, centre, KB_WELL_R * k, CURSOR_SLOPE * k, shell);
+        draw_slope_ring(draw, centre, KB_WELL_R * k, KB_WELL_SLOPE * k, shell);
     }
 }
 

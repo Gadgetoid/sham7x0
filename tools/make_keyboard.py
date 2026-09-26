@@ -1,10 +1,13 @@
 import json
 import sys
 
-CURSOR_GAP_X = 11.0
-CURSOR_GAP_Y = 11.0
-CURSOR_WELL_MARGIN = 3.0
-CURSOR_WELL_DROP = 4.0
+DPAD_KEY = 82.0
+DPAD_UP_DY = -99.30
+DPAD_SIDE_DX = 105.17
+DPAD_SIDE_DY = -5.83
+DPAD_WELL_DY = -25.85
+DPAD_WELL_R = 82.0
+DPAD_FLOOR_R = 62.0
 
 KEY_BACKSPACE = 8
 KEY_ENTER = 13
@@ -69,17 +72,17 @@ def colour(values):
 def respace_cursor(keys, layout):
     cursor = {key["id"]: key for key in keys if key["kind"] == "cursor"}
     down = cursor["down"]
-    pitch_x = down["w"] + CURSOR_GAP_X
-    pitch_y = down["h"] + CURSOR_GAP_Y
-    cursor["left"]["x"] = down["x"] - pitch_x
-    cursor["right"]["x"] = down["x"] + pitch_x
-    cursor["left"]["y"] = cursor["right"]["y"] = down["y"]
+    scale = down["w"] / DPAD_KEY
+    cursor["left"]["x"] = down["x"] - DPAD_SIDE_DX * scale
+    cursor["right"]["x"] = down["x"] + DPAD_SIDE_DX * scale
+    cursor["left"]["y"] = cursor["right"]["y"] = down["y"] + DPAD_SIDE_DY * scale
     cursor["up"]["x"] = down["x"]
-    cursor["up"]["y"] = down["y"] - pitch_y
+    cursor["up"]["y"] = down["y"] + DPAD_UP_DY * scale
     well = layout["recesses"][0]
     well["x"] = down["x"]
-    well["y"] = down["y"] - pitch_y / 2 + CURSOR_WELL_DROP
-    well["r"] = down["y"] + down["h"] / 2 - well["y"] + CURSOR_WELL_MARGIN
+    well["y"] = down["y"] + DPAD_WELL_DY * scale
+    well["r"] = DPAD_WELL_R * scale
+    well["slope"] = (DPAD_WELL_R - DPAD_FLOOR_R) * scale
 
 
 def key_codes(key):
@@ -184,6 +187,7 @@ def main():
         "static const float KB_WELL_X = {:.2f}f;".format(well["x"]),
         "static const float KB_WELL_Y = {:.2f}f;".format(well["y"]),
         "static const float KB_WELL_R = {:.2f}f;".format(well["r"]),
+        "static const float KB_WELL_SLOPE = {:.2f}f;".format(well["slope"]),
         "static const float KB_LABEL_CLEARANCE = {:.2f}f;".format(layout["label_clearance"]),
         "static const float KB_LEGEND_ALPHA = {:.2f}f;".format(layout["fonts"]["alpha"]),
         "static const float KB_LEGEND_STRETCH = {:.3f}f;".format(layout["fonts"]["legend"]["stretch"]),
