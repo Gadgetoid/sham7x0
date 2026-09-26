@@ -43,9 +43,17 @@ In the emulator, pick a port from Emulation > Serial Port (the list of `/dev/cu.
 
 ## Installing programs
 
-Install > Install .wzd (Cmd-I), `--install=FILE` or the console `install PATH` writes a BASIC or machine code `.wzd` straight into a free My Programs slot. Put test files in `apps/` (ignored by git), sorted into `programs/`, `basic/`, `memo/` and `schedule/` by data type. MEMO and SCHEDULE `.wzd` files aren't supported yet.
+Install > Install .wzd (Cmd-I), `--install=FILE` or the console `install PATH` writes a BASIC or machine code `.wzd` straight into a free My Programs slot. Put test files in `apps/` (ignored by git), sorted into `programs/`, `basic/`, `memo/` and `schedule/` by data type. MEMO and SCHEDULE `.wzd` files are sent the way the PC software did: the emulator presses 2nd, MENU (PC SYNC) and plays the PC side of the link over the emulated UART, so the firmware files the records itself. Transfers queue, run at the organizer's 9600 baud, and show progress above the console (or bottom left when it's hidden) and in the App Browser. `headless --install` does the same.
 
-Install > App Browser (Cmd-Shift-I, `--menu=apps`) searches the `index.json` in each of those directories by title, description and category, shows the screenshot and installs the selected program. Up/Down and Page Up/Down move the selection, Enter or a double-click installs. Each `index.json` is an array of objects with `file`, `original_file`, `title`, `data_type`, `category`, `description`, `alert`, `source_url` and `screenshot` (relative to the directory).
+### PC SYNC protocol
+
+From the ZQ-770 firmware (command parser at page 39) and a capture on ozdev. Every packet starts `00 00 00 00 00 96`. `82 05` is ENQ, `82 16` SYN, `82 06` ACK, `82 15` NAK. A frame is `81 10`, a block number (`FF FF` for commands, 1, 2, 3... for data), `01 40 FE`, a 16-bit little-endian length, the payload and a 16-bit little-endian sum of the payload bytes. The side with something to say sends ENQ until it gets SYN, then the frame, and the other side ACKs.
+
+Pressing PC SYNC makes the organizer send `WSYS START`. Sending memos is then `WSYS RECEIVE WIZ_ALL S1:` (answered with the model and owner), `WDAT SEND`, the data stream in numbered blocks, `1A`, and `WSYS RESET` (answered `OK`). Command words come from a table at 0x7342a: `WFIL`, `WDAT`, `WSYS`, `WADN`, `WBAS`, each with its own sub-commands.
+
+The data stream is `"F","S1:MEMO.BOX"` (or `SCHEDUL1.BOX`, `ANNIV1.BOX`, `TODO.BOX`, `ADDRESS.BOX`, `EXPENSE.BOX`) and CRLF, then an `"IT",` item header and one `"D",` block per record. Each block is its tag, a 32-bit big-endian length of the rest and a trailing CRLF. `IT` holds a field count, then per field its type, 4-letter ID and name. `D` holds three words (0, the PC ID or FFFF for none, FF80), a 32-bit length, a field count, the field lengths and the fields. The memo box has `ATTR DATE TTL1 MEM1` and schedule `ATTR TIM1 TIM2 ALRM MEM1`. `ATTR` is one byte, `80` for not secret. Dates are year (16-bit), month, day, hour, minute and `FF FF`, with `FF` for no time. The title is padded to 20 characters and line breaks are CR. `WDAT RECEIVE MEMO.BOX` returns the same format.
+
+Install > App Browser (Cmd-Shift-I, `--menu=apps`) searches the `index.json` in each of those directories by title, description and category, shows the screenshot and installs the selected program, memo or schedule. Up/Down and Page Up/Down move the selection, Enter or a double-click installs. Each `index.json` is an array of objects with `file`, `original_file`, `title`, `data_type`, `category`, `description`, `alert`, `source_url` and `screenshot` (relative to the directory).
 
 A slot is 32KB at page 60 + 4n, ten in all:
 

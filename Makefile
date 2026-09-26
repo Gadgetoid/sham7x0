@@ -14,7 +14,7 @@ LDFLAGS += $(shell pkg-config --libs sdl3) -framework CoreServices -framework Co
 
 CXXFLAGS = $(filter-out -std=c99,$(CFLAGS)) -std=c++17
 
-SRC_MACHINE = src/machine.c src/wzd.c src/serial.c $(Z80)/z80.c
+SRC_MACHINE = src/machine.c src/wzd.c src/serial.c src/pclink.c $(Z80)/z80.c
 
 SRC_APP = \
 	$(SRC_MACHINE) \
@@ -56,7 +56,7 @@ $(BUILD)/%.om: %.m
 $(PROG): $(OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-headless: tools/headless.c $(SRC_MACHINE) src/machine.h src/wzd.h src/serial.h
+headless: tools/headless.c $(SRC_MACHINE) src/machine.h src/wzd.h src/serial.h src/pclink.h
 	$(CC) -Wall -O2 -Isrc -I$(Z80) -o $@ tools/headless.c $(SRC_MACHINE)
 
 -include $(DEPS)

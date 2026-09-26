@@ -23,6 +23,7 @@ void        runtime_enter_test_mode(void);
 bool        runtime_install_wzd(const char *path);
 bool        runtime_set_serial(const char *target);
 const char *runtime_serial_target(void);
+bool        runtime_transfer_progress(float *fraction, const char **description, int *waiting);
 void        runtime_deinit(void);
 
 #ifdef __cplusplus

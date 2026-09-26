@@ -25,13 +25,13 @@ struct App {
     std::string source_url;
     std::string screenshot;
     std::string searchable;
-    bool installable;
+    bool program;
 };
 
 struct Kind {
     const char *directory;
     const char *label;
-    bool installable;
+    bool program;
 };
 
 const Kind KINDS[] = {
@@ -187,7 +187,7 @@ void load() {
             app.alert = record["alert"];
             app.source_url = record["source_url"];
             app.screenshot = record["screenshot"];
-            app.installable = kind.installable;
+            app.program = kind.program;
             app.searchable = lowercase(app.title + "\n" + app.file + "\n" + app.original_file + "\n" + app.category + "\n" + app.description);
             apps.push_back(app);
         }
@@ -219,7 +219,7 @@ std::vector<std::string> search_words() {
 }
 
 const char *list_tag(const App &app) {
-    if (!app.installable) return app.category.c_str();
+    if (!app.program) return app.category.c_str();
     return app.directory == "basic" ? "BASIC" : "";
 }
 
@@ -245,7 +245,9 @@ SDL_Texture *screenshot_texture(SDL_Renderer *renderer, const App &app) {
 void install(int index) {
     const App &app = apps[index];
     install_status_app = index;
-    install_status = runtime_install_wzd(app_path(app, app.file).c_str()) ? "Installed" : "Failed, see console";
+    bool accepted = runtime_install_wzd(app_path(app, app.file).c_str());
+    if (!accepted) install_status = "Failed, see console";
+    else install_status = app.program ? "Installed" : "Transfer finished, see console";
 }
 
 void draw_details(SDL_Renderer *renderer, int index) {
@@ -263,12 +265,18 @@ void draw_details(SDL_Renderer *renderer, int index) {
     ImGui::TextUnformatted(app.title.c_str());
     ImGui::TextDisabled("%s  |  %s  |  %s", app.data_type.c_str(), app.category.c_str(), app.original_file.c_str());
     ImGui::Spacing();
-    ImGui::BeginDisabled(!app.installable);
     if (ImGui::Button("Install")) install(index);
-    ImGui::EndDisabled();
     ImGui::SameLine();
-    if (!app.installable) ImGui::TextDisabled("%s .wzd files can't be installed yet", app.data_type.c_str());
-    else if (install_status_app == index) ImGui::TextDisabled("%s", install_status.c_str());
+    float fraction = 0;
+    const char *description = nullptr;
+    int waiting = 0;
+    if (runtime_transfer_progress(&fraction, &description, &waiting)) {
+        char label[160];
+        snprintf(label, sizeof label, "sending %s  %.0f%%%s", description, fraction * 100, waiting ? "  (more waiting)" : "");
+        ImGui::ProgressBar(fraction, ImVec2(-1, 0), label);
+    } else if (install_status_app == index) {
+        ImGui::TextDisabled("%s", install_status.c_str());
+    }
     ImGui::Separator();
     if (!app.alert.empty()) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.75f, 0.35f, 1.0f));
@@ -356,7 +364,7 @@ void browser_draw(SDL_Renderer *renderer) {
             scroll_to_selected = true;
         }
         bool enter = ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
-        if (enter && apps[selected].installable) install(selected);
+        if (enter) install(selected);
     }
 
     if (apps.empty()) {
@@ -376,7 +384,7 @@ void browser_draw(SDL_Renderer *renderer) {
             ImGui::PushID(index);
             if (ImGui::Selectable(app.title.c_str(), selected == index, ImGuiSelectableFlags_AllowDoubleClick)) {
                 selected = index;
-                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && app.installable) install(index);
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) install(index);
             }
             if (scroll_to_selected && row == selected_row) {
                 float top = ImGui::GetWindowPos().y;

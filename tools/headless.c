@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "machine.h"
+#include "pclink.h"
 #include "serial.h"
 #include "wzd.h"
 
@@ -151,17 +152,29 @@ int main(int argc, char **argv) {
         fprintf(stderr, "cannot load state %s\n", load_path);
         return 1;
     }
+    pclink_t *links[MACHINE_ADDIN_SLOTS];
+    int link_count = 0;
     for (int i = 0; i < install_count; i++) {
         size_t wzd_size = 0;
         uint8_t *wzd_data = read_file(install_paths[i], &wzd_size);
         static uint8_t slot_image[WZD_SLOT_SIZE];
         wzd_program_t program;
-        char error[128] = "";
+        char error[160] = "";
         size_t slot_length = 0;
         int slot = machine_free_addin_slot(machine);
-        if (!wzd_data) snprintf(error, sizeof error, "cannot read file");
-        else if (slot < 0) snprintf(error, sizeof error, "no free slot");
-        else if (wzd_parse(wzd_data, wzd_size, &program, error, sizeof error)) {
+        if (!wzd_data) {
+            snprintf(error, sizeof error, "cannot read file");
+        } else if (!wzd_parse(wzd_data, wzd_size, &program, error, sizeof error)) {
+            pclink_t *link = pclink_create_from_wzd(wzd_data, wzd_size, error, sizeof error);
+            if (link) {
+                links[link_count++] = link;
+                fprintf(stderr, "queued %s from %s\n", pclink_describe(link), install_paths[i]);
+                free(wzd_data);
+                continue;
+            }
+        } else if (slot < 0) {
+            snprintf(error, sizeof error, "no free slot");
+        } else {
             slot_length = wzd_build_slot(&program, slot, slot_image, error, sizeof error);
         }
         if (slot_length && machine_write_addin_slot(machine, slot, slot_image, slot_length)) {
@@ -183,14 +196,32 @@ int main(int argc, char **argv) {
         serial_attach(bridge, machine);
     }
     double started = wall_seconds();
+    int link_index = 0;
+    bool link_started = false;
     const int slices_per_second = 100;
     int total_slices = (int)(seconds * slices_per_second);
     for (int slice = 0; slice < total_slices; slice++) {
         double now = (double)slice / slices_per_second;
+        bool linking = link_index < link_count;
         if (serial) {
             double ahead = now - (wall_seconds() - started);
             if (ahead > 0) usleep((useconds_t)(ahead * 1e6));
-            serial_poll(bridge, machine);
+            if (!linking) serial_poll(bridge, machine);
+        }
+        if (linking) {
+            if (!link_started) {
+                pclink_start(links[link_index], machine);
+                link_started = true;
+            }
+            pclink_state_t state = pclink_step(links[link_index], machine);
+            if (state != PCLINK_RUNNING) {
+                if (state == PCLINK_DONE) fprintf(stderr, "sent %s at %.1fs\n", pclink_describe(links[link_index]), now);
+                else fprintf(stderr, "cannot send %s: %s\n", pclink_describe(links[link_index]), pclink_error(links[link_index]));
+                pclink_destroy(links[link_index]);
+                link_index++;
+                link_started = false;
+                serial_attach(bridge, machine);
+            }
         }
         for (int i = 0; i < event_count; i++) {
             if (events[i].at_seconds >= now && events[i].at_seconds < now + 1.0 / slices_per_second) {

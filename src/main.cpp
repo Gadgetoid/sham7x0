@@ -515,6 +515,17 @@ static void set_console_visible(SDL_Window *window, bool visible, const DeviceSt
     }
 }
 
+static void draw_transfer_progress(float width) {
+    float fraction = 0;
+    const char *description = nullptr;
+    int waiting = 0;
+    if (!runtime_transfer_progress(&fraction, &description, &waiting)) return;
+    char label[160];
+    if (waiting) snprintf(label, sizeof label, "sending %s  %.0f%%  (%d more waiting)", description, fraction * 100, waiting);
+    else snprintf(label, sizeof label, "sending %s  %.0f%%", description, fraction * 100);
+    ImGui::ProgressBar(fraction, ImVec2(width, 0), label);
+}
+
 static void save_screenshot(SDL_Renderer *renderer, const std::string &path) {
     SDL_Surface *surface = SDL_RenderReadPixels(renderer, nullptr);
     if (!surface) {
@@ -789,6 +800,8 @@ int main(int argc, char **argv) {
 
         if (console_visible) {
             ImGui::TextDisabled("%s", device_focused ? "keys -> device  (Cmd-L: console)" : "keys -> console  (Esc: device)");
+            ImGui::SameLine();
+            draw_transfer_progress(320);
             ImGui::SameLine(ImGui::GetContentRegionMax().x - 200);
             if (fps > 0) {
                 ImGui::TextDisabled("%s  %.0f fps  LCD %d fps", runtime_idle() ? "idle" : "running", io.Framerate, fps);
@@ -799,6 +812,19 @@ int main(int argc, char **argv) {
             console_draw();
         }
         ImGui::End();
+        if (!console_visible) {
+            float fraction = 0;
+            const char *description = nullptr;
+            int waiting = 0;
+            if (runtime_transfer_progress(&fraction, &description, &waiting)) {
+                ImGui::SetNextWindowPos(ImVec2(12, io.DisplaySize.y - 12), ImGuiCond_Always, ImVec2(0, 1));
+                ImGui::SetNextWindowBgAlpha(0.85f);
+                ImGui::Begin("transfer", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                                                  ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+                draw_transfer_progress(360);
+                ImGui::End();
+            }
+        }
         browser_draw(renderer);
 
         ImGui::Render();

@@ -8,6 +8,7 @@
 #include "keys.h"
 #include "lcd.h"
 #include "machine.h"
+#include "pclink.h"
 #include "runtime.h"
 #include "serial.h"
 #include "wzd.h"
@@ -46,6 +47,7 @@
 #define MAX_CLOCK_CATCH_UP (400LL * 24 * 60 * 60)
 #define DEFAULT_CONTRAST   32
 #define AUDIO_LATENCY_MS   40
+#define MAX_LINKS          16
 
 typedef struct {
     uint16_t codes[MAX_STEP_KEYS];
@@ -113,6 +115,9 @@ static uint64_t sound_cursor = 0;
 static float sound_frequency = 0;
 static machine_lcd_t shown_lcd = { true, DEFAULT_CONTRAST, false };
 static serial_bridge_t *serial = NULL;
+static pclink_t *links[MAX_LINKS];
+static int link_count = 0;
+static bool link_started = false;
 static char serial_target[512] = "";
 
 static void log_to_console(const char *message) {
@@ -439,9 +444,23 @@ bool runtime_install_wzd(const char *path) {
     wzd_program_t program;
     size_t slot_length = 0;
     int slot = machine ? machine_free_addin_slot(machine) : -1;
-    if (!data) snprintf(error, sizeof error, "cannot read the file");
-    else if (slot < 0) snprintf(error, sizeof error, "all %d My Programs slots are in use", MACHINE_ADDIN_SLOTS);
-    else if (wzd_parse(data, size, &program, error, sizeof error)) slot_length = wzd_build_slot(&program, slot, slot_image, error, sizeof error);
+    if (!data) {
+        snprintf(error, sizeof error, "cannot read the file");
+    } else if (!wzd_parse(data, size, &program, error, sizeof error)) {
+        pclink_t *link = link_count < MAX_LINKS ? pclink_create_from_wzd(data, size, error, sizeof error) : NULL;
+        if (link_count == MAX_LINKS) snprintf(error, sizeof error, "%d transfers are already waiting", MAX_LINKS);
+        if (link) {
+            links[link_count++] = link;
+            snprintf(message, sizeof message, "sending %s over PC SYNC%s", pclink_describe(link), link_count > 1 ? " after the current transfer" : "");
+            console_notice(message);
+            free(data);
+            return true;
+        }
+    } else if (slot < 0) {
+        snprintf(error, sizeof error, "all %d My Programs slots are in use", MACHINE_ADDIN_SLOTS);
+    } else {
+        slot_length = wzd_build_slot(&program, slot, slot_image, error, sizeof error);
+    }
     bool installed = slot_length && machine_write_addin_slot(machine, slot, slot_image, slot_length);
     if (installed) snprintf(message, sizeof message, "installed %s as My Programs %d", program.title, slot + 1);
     else snprintf(message, sizeof message, "cannot install %s: %s", path, error);
@@ -450,9 +469,35 @@ bool runtime_install_wzd(const char *path) {
     return installed;
 }
 
+static void step_link(void) {
+    pclink_t *link = links[0];
+    if (!link_started) {
+        pclink_start(link, machine);
+        link_started = true;
+    }
+    pclink_state_t state = pclink_step(link, machine);
+    if (state == PCLINK_RUNNING) return;
+    char message[256];
+    if (state == PCLINK_DONE) snprintf(message, sizeof message, "sent %s", pclink_describe(link));
+    else snprintf(message, sizeof message, "cannot send %s: %s", pclink_describe(link), pclink_error(link));
+    console_notice(message);
+    pclink_destroy(link);
+    memmove(links, links + 1, (size_t)(--link_count) * sizeof links[0]);
+    link_started = false;
+    serial_attach(serial, machine);
+}
+
+bool runtime_transfer_progress(float *fraction, const char **description, int *waiting) {
+    if (!link_count) return false;
+    *fraction = link_started ? pclink_progress(links[0]) : 0.0f;
+    *description = pclink_describe(links[0]);
+    *waiting = link_count - 1;
+    return true;
+}
+
 bool runtime_set_serial(const char *target) {
     if (serial) {
-        serial_attach(NULL, machine);
+        if (!link_started) serial_attach(NULL, machine);
         serial_close(serial);
         serial = NULL;
         serial_target[0] = 0;
@@ -468,7 +513,7 @@ bool runtime_set_serial(const char *target) {
     console_notice(description);
     if (!serial) return false;
     snprintf(serial_target, sizeof serial_target, "%s", target);
-    serial_attach(serial, machine);
+    if (!link_started) serial_attach(serial, machine);
     return true;
 }
 
@@ -552,7 +597,8 @@ void runtime_step(void) {
         advance_keys(this_slice);
         uint64_t cycles = cycles_for_ms(emulated_ms + this_slice) - cycles_for_ms(emulated_ms);
         emulated_ms += this_slice;
-        if (serial) serial_poll(serial, machine);
+        if (link_count) step_link();
+        else if (serial) serial_poll(serial, machine);
         machine_run(machine, (uint32_t)cycles);
     }
     drain_sound();
@@ -598,6 +644,8 @@ void runtime_set_resume(const char *name) {
 }
 
 void runtime_deinit(void) {
+    for (int i = 0; i < link_count; i++) pclink_destroy(links[i]);
+    link_count = 0;
     if (serial) runtime_set_serial(NULL);
     save_state();
     machine_destroy(machine);

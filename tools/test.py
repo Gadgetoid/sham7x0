@@ -46,6 +46,8 @@ CASES = [
      "keys": [(0.5, PROG, 0.2)], "save": "programs"},
     {"name": "basic_program_runs", "load": "programs", "seconds": 4, "keys": [(0.5, "2.0", 0.2)]},
     {"name": "machine_code_program_runs", "load": "programs", "seconds": 4, "keys": [(0.5, "3.0", 0.2)]},
+    {"name": "memo_sent_over_pc_sync", "load": "main", "install": ["memo/Chili Joke [Chili food joke]"], "seconds": 10,
+     "keys": [(8, MEMO, 0.2)]},
     {"name": "program_deleted", "load": "programs", "seconds": 8,
      "keys": [(0.5, MENU, 0.2), (1.5, KEY_2, 0.2), (2.5, ENTER, 0.2), (5, MAIN, 0.2), (6.5, PROG, 0.2)]},
 ]
