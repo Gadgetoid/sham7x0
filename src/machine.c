@@ -33,6 +33,9 @@
 #define INTERRUPT_POWER_KEY  0x80
 #define POWER_KEY_BIT        0x10
 #define STATUS_INPUTS        0xe8
+#define ZQ770_STATUS_INPUTS  0xf8
+#define FLASH_MIRROR_FIRST   0x180
+#define FLASH_MIRROR_OFFSET  0x80
 #define SOUND_QUEUE_SIZE     256
 #define SOUND_BASE_HZ        16384.0f
 #define SNAPSHOT_MAGIC       "ZQ77XSNAP3"
@@ -108,6 +111,8 @@ typedef struct {
 
 struct machine {
     z80      cpu;
+    machine_model_t model;
+    uint8_t  bus;
     uint8_t *flash;
     uint8_t *ram;
     flash_state_t flash_state;
@@ -148,7 +153,11 @@ static void machine_log(machine_t *machine, const char *format, ...) {
     else fprintf(stderr, "%s\n", message);
 }
 
-static int ram_index(uint16_t page) {
+static int ram_index(machine_t *machine, uint16_t page) {
+    if (machine->model == MACHINE_MODEL_ZQ770) {
+        if (page >= RAM_FIRST_PAGE && page < RAM_SECOND_CHIP_PAGE) return (page - RAM_FIRST_PAGE) % RAM_CHIP_PAGES;
+        return -1;
+    }
     if (page >= RAM_FIRST_PAGE && page < RAM_FIRST_PAGE + RAM_CHIP_PAGES) return page - RAM_FIRST_PAGE;
     if (page >= RAM_SECOND_CHIP_PAGE && page < RAM_SECOND_CHIP_PAGE + RAM_CHIP_PAGES) {
         return RAM_CHIP_PAGES + page - RAM_SECOND_CHIP_PAGE;
@@ -158,19 +167,23 @@ static int ram_index(uint16_t page) {
 
 static uint8_t *page_pointer(machine_t *machine, uint16_t page) {
     if (page < FLASH_PAGES) return machine->flash + (size_t)page * PAGE_SIZE;
-    int index = ram_index(page);
+    int index = ram_index(machine, page);
     if (index >= 0) return machine->ram + (size_t)index * PAGE_SIZE;
     return NULL;
 }
 
-static bool page_is_ram(uint16_t page) {
-    return ram_index(page) >= 0;
+static bool page_is_ram(machine_t *machine, uint16_t page) {
+    return ram_index(machine, page) >= 0;
+}
+
+static uint16_t flash_mirror(uint16_t page) {
+    return page >= FLASH_MIRROR_FIRST && page < FLASH_PAGES ? (uint16_t)(page - FLASH_MIRROR_OFFSET) : page;
 }
 
 static uint16_t window_page(machine_t *machine, uint16_t address) {
     if (address >= FIXED_RAM_BASE) return (uint16_t)(FIXED_RAM_FIRST_PAGE + ((address - FIXED_RAM_BASE) >> 13));
-    if (address < 0xa000) return (uint16_t)(machine->low_window_page + 4);
-    return machine->high_window_page;
+    if (address < 0xa000) return flash_mirror((uint16_t)(machine->low_window_page + 4));
+    return flash_mirror(machine->high_window_page);
 }
 
 static uint32_t flash_address(uint16_t page, uint16_t address) {
@@ -232,8 +245,7 @@ static void flash_write(machine_t *machine, uint32_t offset, uint8_t value) {
     }
 }
 
-static uint8_t read_byte(void *userdata, uint16_t address) {
-    machine_t *machine = userdata;
+static uint8_t read_memory(machine_t *machine, uint16_t address) {
     if (address < 0x8000) return flash_read(machine, address);
     uint16_t page = window_page(machine, address);
     if (page < FLASH_PAGES) {
@@ -242,9 +254,16 @@ static uint8_t read_byte(void *userdata, uint16_t address) {
     }
     uint8_t *memory = page_pointer(machine, page);
     if (memory) return memory[address & (PAGE_SIZE - 1)];
-    if (page == LCD_CONTROL_PAGE) return (address & 1) ? machine->lcd_control >> 8 : machine->lcd_control & 0xff;
+    bool open_bus = machine->model == MACHINE_MODEL_ZQ770;
+    if (page == LCD_CONTROL_PAGE && !open_bus) return (address & 1) ? machine->lcd_control >> 8 : machine->lcd_control & 0xff;
     if (machine->trace_ports) machine_log(machine, "unmapped read page %03x addr %04x pc %04x", page, address, machine->cpu.pc);
-    return 0xff;
+    return open_bus ? machine->bus : 0xff;
+}
+
+static uint8_t read_byte(void *userdata, uint16_t address) {
+    machine_t *machine = userdata;
+    machine->bus = read_memory(machine, address);
+    return machine->bus;
 }
 
 static void write_byte(void *userdata, uint16_t address, uint8_t value) {
@@ -259,7 +278,7 @@ static void write_byte(void *userdata, uint16_t address, uint8_t value) {
         flash_write(machine, flash_address(page, address), value);
         return;
     }
-    if (page_is_ram(page)) {
+    if (page_is_ram(machine, page)) {
         page_pointer(machine, page)[address & (PAGE_SIZE - 1)] = value;
         return;
     }
@@ -465,9 +484,25 @@ size_t machine_serial_input(machine_t *machine, const uint8_t *data, size_t leng
     return accepted;
 }
 
+static bool zq770_port_undecoded(uint8_t port) {
+    if (port >= 0x50) return true;
+    if (port >= 0x25 && port <= 0x2f) return true;
+    if (port >= 0x1a && port <= 0x1f) return true;
+    if (port >= 0x0d && port <= 0x0f) return true;
+    return port == 0x00 || port == 0x06 || port == 0x09 || port == 0x0a || port == 0x16;
+}
+
+static uint8_t zq770_port(uint8_t port) {
+    return port >= 0x48 && port <= 0x4f ? (uint8_t)(port - 8) : port;
+}
+
 static uint8_t port_in(z80 *cpu, uint8_t port) {
     machine_t *machine = cpu->userdata;
     uint8_t value;
+    if (machine->model == MACHINE_MODEL_ZQ770) {
+        if (zq770_port_undecoded(port)) return machine->bus;
+        port = zq770_port(port);
+    }
     switch (port) {
         case 0x01: value = machine->low_window_page & 0xff; break;
         case 0x02: value = machine->low_window_page >> 8; break;
@@ -477,7 +512,11 @@ static uint8_t port_in(z80 *cpu, uint8_t port) {
         case 0x07: value = machine->interrupt_mask; break;
         case 0x10: value = keyboard_rows(machine); break;
         case 0x11: value = machine->column_select_low; break;
-        case 0x12: value = (uint8_t)((machine->ports[0x12] & ~STATUS_INPUTS) | STATUS_INPUTS); break;
+        case 0x12: {
+            uint8_t inputs = machine->model == MACHINE_MODEL_ZQ770 ? ZQ770_STATUS_INPUTS : STATUS_INPUTS;
+            value = (uint8_t)((machine->ports[0x12] & ~inputs) | inputs);
+            break;
+        }
         case 0x22: value = machine->display_page & 0xff; break;
         case 0x23: value = machine->display_page >> 8; break;
         case 0x46: value = (uint8_t)((machine->ports[0x46] & ~POWER_KEY_BIT) | (machine->power_key ? POWER_KEY_BIT : 0)); break;
@@ -494,6 +533,7 @@ static uint8_t port_in(z80 *cpu, uint8_t port) {
 
 static void port_out(z80 *cpu, uint8_t port, uint8_t value) {
     machine_t *machine = cpu->userdata;
+    if (machine->model == MACHINE_MODEL_ZQ770) port = zq770_port(port);
     machine->ports[port] = value;
     switch (port) {
         case 0x01: machine->low_window_page = (uint16_t)((machine->low_window_page & 0xff00) | value); return;
@@ -518,9 +558,10 @@ static void port_out(z80 *cpu, uint8_t port, uint8_t value) {
     note_port(machine, port, true, value);
 }
 
-machine_t *machine_create(const uint8_t *flash_image, size_t flash_size) {
+machine_t *machine_create(const uint8_t *flash_image, size_t flash_size, machine_model_t model) {
     machine_t *machine = calloc(1, sizeof *machine);
     if (!machine) return NULL;
+    machine->model = model;
     machine->watch_pc = -1;
     machine->flash = malloc(FLASH_SIZE);
     machine->ram = calloc(RAM_PAGES, PAGE_SIZE);
@@ -533,6 +574,10 @@ machine_t *machine_create(const uint8_t *flash_image, size_t flash_size) {
     rtc_load_host_time(&machine->rtc);
     machine_reset(machine);
     return machine;
+}
+
+machine_model_t machine_get_model(machine_t *machine) {
+    return machine->model;
 }
 
 void machine_destroy(machine_t *machine) {

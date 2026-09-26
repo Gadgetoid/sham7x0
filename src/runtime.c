@@ -13,7 +13,6 @@
 #include "serial.h"
 #include "wzd.h"
 
-#define KEYCODE_TABLE      0x23a3
 #define FIRMWARE_SHIFT     0x0800
 #define FIRMWARE_SECOND    0x8037
 #define FIRMWARE_ENTER     0x8038
@@ -140,11 +139,25 @@ static uint8_t *read_file(const char *path, size_t *size) {
     return data;
 }
 
+static const size_t keycode_tables[] = { 0x23a3, 0x2400 };
+
+static uint16_t rom_word(size_t offset) {
+    return offset + 1 < rom_size ? (uint16_t)(rom_image[offset] | rom_image[offset + 1] << 8) : 0;
+}
+
+static size_t find_keycode_table(void) {
+    const size_t enter_entry = (size_t)(6 * MACHINE_KEY_ROWS + 6) * 2;
+    for (size_t i = 0; i < sizeof keycode_tables / sizeof keycode_tables[0]; i++) {
+        if (rom_word(keycode_tables[i] + enter_entry) == FIRMWARE_ENTER) return keycode_tables[i];
+    }
+    return keycode_tables[0];
+}
+
 static void load_keycode_table(void) {
+    size_t table = find_keycode_table();
     for (int column = 0; column < MACHINE_KEY_COLUMNS; column++) {
         for (int row = 0; row < MACHINE_KEY_ROWS; row++) {
-            size_t offset = KEYCODE_TABLE + (size_t)(column * MACHINE_KEY_ROWS + row) * 2;
-            matrix_codes[column][row] = offset + 1 < rom_size ? (uint16_t)(rom_image[offset] | rom_image[offset + 1] << 8) : 0;
+            matrix_codes[column][row] = rom_word(table + (size_t)(column * MACHINE_KEY_ROWS + row) * 2);
         }
     }
 }
@@ -569,7 +582,7 @@ bool runtime_init(const host_config_t *config) {
         return false;
     }
     load_keycode_table();
-    machine = machine_create(rom_image, rom_size);
+    machine = machine_create(rom_image, rom_size, MACHINE_MODEL_OZ750);
     if (!machine) return false;
     machine_set_log(machine, log_to_console);
     persist = config->persist;

@@ -18,6 +18,11 @@ extern "C" {
 
 typedef struct machine machine_t;
 
+typedef enum {
+    MACHINE_MODEL_OZ750,
+    MACHINE_MODEL_ZQ770,
+} machine_model_t;
+
 typedef void (*machine_log_fn)(const char *message);
 typedef void (*machine_serial_out_fn)(void *context, uint8_t value);
 
@@ -32,7 +37,8 @@ typedef struct {
     bool backlight;
 } machine_lcd_t;
 
-machine_t     *machine_create(const uint8_t *flash_image, size_t flash_size);
+machine_t     *machine_create(const uint8_t *flash_image, size_t flash_size, machine_model_t model);
+machine_model_t machine_get_model(machine_t *machine);
 void           machine_destroy(machine_t *machine);
 void           machine_reset(machine_t *machine);
 void           machine_run(machine_t *machine, uint32_t cycles);

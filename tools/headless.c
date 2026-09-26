@@ -88,6 +88,7 @@ static int parse_keys(const char *spec, key_event_t *events, int capacity) {
 
 int main(int argc, char **argv) {
     const char *rom_path = NULL;
+    machine_model_t model = MACHINE_MODEL_OZ750;
     const char *pbm_path = NULL;
     const char *load_path = NULL;
     const char *save_path = NULL;
@@ -134,10 +135,12 @@ int main(int argc, char **argv) {
         }
         else if (strncmp(argv[i], "--watch=", 8) == 0) watch_pc = (int)strtol(argv[i] + 8, NULL, 0);
         else if (strncmp(argv[i], "--page=", 7) == 0) dump_page = (int)strtol(argv[i] + 7, NULL, 0);
+        else if (strcmp(argv[i], "--model=ZQ-770") == 0) model = MACHINE_MODEL_ZQ770;
+        else if (strcmp(argv[i], "--model=OZ-750") == 0) model = MACHINE_MODEL_OZ750;
         else rom_path = argv[i];
     }
     if (!rom_path) {
-        fprintf(stderr, "usage: headless ROM [--seconds=N] [--pbm=FILE] [--load=STATE] [--save=STATE] [--trace-ports] [--keys=T:COL.ROW/HOLD,...] [--serial[=LINK|DEVICE]] [--serial-log=FILE]\n");
+        fprintf(stderr, "usage: headless ROM [--seconds=N] [--pbm=FILE] [--load=STATE] [--save=STATE] [--trace-ports] [--keys=T:COL.ROW/HOLD,...] [--model=OZ-750|ZQ-770] [--serial[=LINK|DEVICE]] [--serial-log=FILE]\n");
         return 1;
     }
     size_t size = 0;
@@ -146,7 +149,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "cannot read %s\n", rom_path);
         return 1;
     }
-    machine_t *machine = machine_create(image, size);
+    machine_t *machine = machine_create(image, size, model);
     int64_t saved_at = 0;
     if (load_path && !machine_load(machine, load_path, &saved_at)) {
         fprintf(stderr, "cannot load state %s\n", load_path);
