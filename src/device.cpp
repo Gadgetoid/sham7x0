@@ -675,8 +675,21 @@ Shape lid_shape(const Frame &frame, const LidShape &shape) {
     return polygon;
 }
 
+template <typename Map>
+void fill_triangles(ImDrawList *draw, const float *triangles, int count, const std::vector<Shape> &contours, Map map, ImU32 colour, float edge) {
+    draw->PrimReserve(count * 3, count * 3);
+    ImVec2 uv = draw->_Data->TexUvWhitePixel;
+    ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
+    for (int i = 0; i < count * 3; i++) {
+        draw->PrimWriteVtx(map(triangles[i * 2], triangles[i * 2 + 1]), uv, colour);
+        draw->PrimWriteIdx((ImDrawIdx)(base + i));
+    }
+    for (const Shape &contour : contours) draw->AddPolyline(contour.data(), (int)contour.size(), colour, ImDrawFlags_Closed, edge);
+}
+
 void fill_lid_icon(ImDrawList *draw, const Frame &frame, const LidShape &shape, ImVec2 offset, ImU32 colour) {
-    for (const Shape &polygon : lid_regions(frame, shape, offset)) draw->AddConcavePolyFilled(polygon.data(), (int)polygon.size(), colour);
+    fill_triangles(draw, shape.triangles, shape.triangle_count, lid_regions(frame, shape, offset),
+                   [&](float x, float y) { return frame.lid(x, y) + offset; }, colour, 0.6f);
 }
 
 LidLayout lid_layout(const Frame &frame) {
@@ -1318,12 +1331,14 @@ void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const
                 ImVec2 at = ImVec2(frame.at((icon_left + icon_right) * 0.5f, 0).x + dip.x, centre.y - 6.5f * k * key.h / KEY_REFERENCE_H);
                 centred_legend(draw, keyboard_font(false), key.legend_size * k, key.legend, at, legend_colour, fitted);
             }
+            std::vector<Shape> contours;
             const float *point = key.icon_points;
             for (int region = 0; region < key.icon_regions; region++) {
-                Shape polygon = traced_points(frame, point, key.icon_counts[region], dip);
-                draw->AddConcavePolyFilled(polygon.data(), (int)polygon.size(), legend_colour);
+                contours.push_back(traced_points(frame, point, key.icon_counts[region], dip));
                 point += key.icon_counts[region] * 2;
             }
+            fill_triangles(draw, key.icon_triangles, key.icon_triangle_count, contours,
+                           [&](float x, float y) { return frame.at(x, y) + dip; }, legend_colour, 0.6f);
         } else if (key.icon == KB_ICON_NONE && key.legend) {
             legend_box = centred_legend(draw, keyboard_font(false), key.legend_size * k, key.legend, legend_centre, legend_colour,
                                         KB_LEGEND_STRETCH * key.stretch);

@@ -136,6 +136,7 @@ def apply_svg(keys, layout, path):
         for name, polygons in icons:
             if svg_keyboard.contains(shapes[si], svg_keyboard.centre([p for polygon in polygons for p in polygon])):
                 key["svg_icon"] = [[mapped(p) for p in polygon] for polygon in polygons]
+                key["svg_triangles"] = [p for triangle in svg_keyboard.icon_geometry(key["svg_icon"])[0] for p in triangle]
         for locator in locators:
             if svg_keyboard.contains(shapes[si], svg_keyboard.centre(locator)):
                 key["svg_locator"] = [mapped(p) for p in locator]
@@ -245,6 +246,8 @@ def main():
         "    const float *icon_points;",
         "    const int *icon_counts;",
         "    int icon_regions;",
+        "    const float *icon_triangles;",
+        "    int icon_triangle_count;",
         "    const float *locator;",
         "    int locator_count;",
         "};",
@@ -290,6 +293,7 @@ def main():
         if "svg_icon" in key:
             lines.append("static const float KB_ICON_{}[] = {{ {} }};".format(name, points(p for polygon in key["svg_icon"] for p in polygon)))
             lines.append("static const int KB_ICON_{}_COUNTS[] = {{ {} }};".format(name, ", ".join(str(len(polygon)) for polygon in key["svg_icon"])))
+            lines.append("static const float KB_ICON_{}_TRIANGLES[] = {{ {} }};".format(name, points(key["svg_triangles"])))
         if "svg_locator" in key:
             lines.append("static const float KB_LOCATOR_{}[] = {{ {} }};".format(name, points(key["svg_locator"])))
     lines += ["", "static const KeyboardKey keyboard_keys[] = {"]
@@ -303,7 +307,7 @@ def main():
                 ICONS[item.get("icon", "")]))
         while len(secondaries) < 2:
             secondaries.append("{ nullptr, 0, 0.0f, 0.0f, 0 }")
-        lines.append("    {{ {}, {:.2f}f, {:.2f}f, {:.2f}f, {:.2f}f, {}, {}, {}, {}, {}, {:.2f}f, {:.2f}f, {:.2f}f, 0x{:x}, 0x{:x}, 0x{:x}, {}, {}, {}, {}, {:.2f}f, {}, {{ {}, {} }}, {}, {}, {}, {}, {}, {}, {} }},".format(
+        lines.append("    {{ {}, {:.2f}f, {:.2f}f, {:.2f}f, {:.2f}f, {}, {}, {}, {}, {}, {:.2f}f, {:.2f}f, {:.2f}f, 0x{:x}, 0x{:x}, 0x{:x}, {}, {}, {}, {}, {:.2f}f, {}, {{ {}, {} }}, {}, {}, {}, {}, {}, {}, {}, {}, {} }},".format(
             c_string(key["id"]), key["x"], key["y"], key["w"], key["h"], SHAPES[key["shape"]],
             SIDES.get(key.get("round_side", key.get("square_side", "right")), 0), COLOURS[key["colour"]], c_string(legend_spec.get("text")),
             ICONS[legend_spec.get("icon", "")], legend_spec["size"], legend_spec["dy"], legend_spec.get("stretch", 1.0),
@@ -313,6 +317,7 @@ def main():
             "KB_OUTLINE_" + key["id"].upper() if "outline" in key else "nullptr", len(key.get("outline", [])),
             "KB_ICON_" + key["id"].upper() if "svg_icon" in key else "nullptr",
             "KB_ICON_" + key["id"].upper() + "_COUNTS" if "svg_icon" in key else "nullptr", len(key.get("svg_icon", [])),
+            "KB_ICON_" + key["id"].upper() + "_TRIANGLES" if "svg_icon" in key else "nullptr", len(key.get("svg_triangles", [])) // 3,
             "KB_LOCATOR_" + key["id"].upper() if "svg_locator" in key else "nullptr", len(key.get("svg_locator", []))))
     lines.append("};")
     open(sys.argv[2], "w").write("\n".join(lines) + "\n")

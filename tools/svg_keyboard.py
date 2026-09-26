@@ -179,13 +179,32 @@ def regions(paths):
     return result
 
 
+def crosses(a, b, c, d):
+    def side(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    if a in (c, d) or b in (c, d):
+        return False
+    return side(a, b, c) * side(a, b, d) < 0 and side(c, d, a) * side(c, d, b) < 0
+
+
+def visible(a, b, polygons):
+    for polygon in polygons:
+        for i in range(len(polygon)):
+            if crosses(a, b, polygon[i], polygon[(i + 1) % len(polygon)]):
+                return False
+    return True
+
+
 def bridge(outer, holes):
     outer = outer if area(outer) > 0 else outer[::-1]
-    for hole in sorted(holes, key=lambda h: -max(p[0] for p in h)):
-        hole = hole if area(hole) < 0 else hole[::-1]
+    holes = [hole if area(hole) < 0 else hole[::-1] for hole in holes]
+    remaining = sorted(holes, key=lambda h: -max(p[0] for p in h))
+    while remaining:
+        hole = remaining.pop(0)
         hi = max(range(len(hole)), key=lambda i: hole[i][0])
-        hx, hy = hole[hi]
-        oi = min(range(len(outer)), key=lambda i: (outer[i][0] - hx) ** 2 + (outer[i][1] - hy) ** 2 if outer[i][0] >= hx else float("inf"))
+        start = hole[hi]
+        order = sorted(range(len(outer)), key=lambda i: (outer[i][0] - start[0]) ** 2 + (outer[i][1] - start[1]) ** 2)
+        oi = next(i for i in order if visible(start, outer[i], [outer, hole] + remaining))
         loop = hole[hi:] + hole[:hi + 1]
         outer = outer[:oi + 1] + loop + outer[oi:]
     return outer
@@ -227,7 +246,7 @@ def load(path):
             continue
         paths = [[apply(transform, p) for p in sub] for sub in subpaths(d)]
         if name.startswith("icon-"):
-            icons.append((name, regions(paths)))
+            icons.append((name, paths))
         elif fill == LOCATOR_FILL:
             locators.append(paths[0])
         else:
@@ -239,3 +258,40 @@ def centre(points):
     xs = [p[0] for p in points]
     ys = [p[1] for p in points]
     return (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+
+
+def triangulate(polygon):
+    points = polygon if area(polygon) > 0 else polygon[::-1]
+    indices = list(range(len(points)))
+    triangles = []
+
+    def cross(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    def inside(p, a, b, c):
+        return cross(a, b, p) > 1e-12 and cross(b, c, p) > 1e-12 and cross(c, a, p) > 1e-12
+
+    while len(indices) > 3:
+        count = len(indices)
+        ear = None
+        for k in range(count):
+            a, b, c = points[indices[k - 1]], points[indices[k]], points[indices[(k + 1) % count]]
+            if cross(a, b, c) <= 1e-12:
+                continue
+            if any(inside(points[j], a, b, c) for j in indices if points[j] not in (a, b, c)):
+                continue
+            ear = k
+            break
+        if ear is None:
+            ear = min(range(count), key=lambda k: abs(cross(points[indices[k - 1]], points[indices[k]], points[indices[(k + 1) % count]])))
+        else:
+            triangles.append((points[indices[ear - 1]], points[indices[ear]], points[indices[(ear + 1) % count]]))
+        del indices[ear]
+    if len(indices) == 3 and cross(points[indices[0]], points[indices[1]], points[indices[2]]) > 1e-12:
+        triangles.append(tuple(points[i] for i in indices))
+    return triangles
+
+
+def icon_geometry(paths):
+    triangles = [t for region in regions(paths) for t in triangulate(region)]
+    return triangles, paths

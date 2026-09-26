@@ -8,10 +8,10 @@ import svg_keyboard as svg
 
 GLASS_UNITS = 282.0
 MARGIN_X = 3
-CASE_MARGIN_LEFT = 31.0
-CASE_MARGIN_RIGHT = 24.0
-CASE_MARGIN_TOP = 68.0
-CASE_MARGIN_BOTTOM = 36.0
+CASE_MARGIN_LEFT = 18.0
+CASE_MARGIN_RIGHT = 14.0
+CASE_MARGIN_TOP = 58.0
+CASE_MARGIN_BOTTOM = 22.0
 
 
 def rounded_rect(x, y, w, h, r):
@@ -114,6 +114,8 @@ def main():
         "    const float *points;",
         "    const int *counts;",
         "    int regions;",
+        "    const float *triangles;",
+        "    int triangle_count;",
         "};",
         "",
         "static const int LID_LCD_MARGIN_X = {};".format(MARGIN_X),
@@ -133,13 +135,19 @@ def main():
         "down_icon", "esc_well", "esc", "enter"]
     for name in order:
         shape = named[name]
-        polygons = svg.regions(shape["paths"]) if name.endswith("_icon") else [shape["paths"][0]]
+        polygons = shape["paths"] if name.endswith("_icon") else [shape["paths"][0]]
         polygons = [[unit(p) for p in polygon] for polygon in polygons]
+        triangles = [p for triangle in svg.icon_geometry(polygons)[0] for p in triangle] if name.endswith("_icon") else []
         upper = name.upper()
         lines.append("static const float LID_SHAPE_{}_POINTS[] = {{ {} }};".format(
             upper, ", ".join("{:.2f}f, {:.2f}f".format(x, y) for polygon in polygons for x, y in polygon)))
         lines.append("static const int LID_SHAPE_{}_COUNTS[] = {{ {} }};".format(upper, ", ".join(str(len(p)) for p in polygons)))
-        lines.append("static const LidShape LID_SHAPE_{} = {{ LID_SHAPE_{}_POINTS, LID_SHAPE_{}_COUNTS, {} }};".format(upper, upper, upper, len(polygons)))
+        triangle_array = "nullptr"
+        if triangles:
+            triangle_array = "LID_SHAPE_{}_TRIANGLES".format(upper)
+            lines.append("static const float {}[] = {{ {} }};".format(triangle_array, ", ".join("{:.2f}f, {:.2f}f".format(x, y) for x, y in triangles)))
+        lines.append("static const LidShape LID_SHAPE_{} = {{ LID_SHAPE_{}_POINTS, LID_SHAPE_{}_COUNTS, {}, {}, {} }};".format(
+            upper, upper, upper, len(polygons), triangle_array, len(triangles) // 3))
     open(sys.argv[2], "w").write("\n".join(lines) + "\n")
     print("{}: glass {:.1f}x{:.1f} mm, LCD margin {}x{}".format(sys.argv[2], gx1 - gx0, gy1 - gy0, MARGIN_X, margin_y))
 
