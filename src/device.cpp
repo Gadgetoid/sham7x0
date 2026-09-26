@@ -578,6 +578,7 @@ const ImU32 SLOPE_LIT = IM_COL32(236, 240, 242, 255);
 const float KEY_HOLE_GAP = 2.2f;
 const float HOMING_DROP = 0.4f;
 const float KEY_REFERENCE_H = 36.6f;
+const float KEYCAP_LEGEND_ALPHA = 0.76f;
 const float HOMING_HALF_W = 8.4f;
 const float HOMING_HALF_H = 2.25f;
 const float KEY_HOLE_EDGE_WIDTH = 1.1f;
@@ -1446,7 +1447,7 @@ void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const
             for (int step = 3; step >= 1; step--) fill(draw, translated(bar, ImVec2(0, step * 0.35f * k)), ridge_side, ridge_side);
             fill(draw, bar, lighten(style.top, 6), mix(style.top, style.bottom, 0.45f));
         }
-        ImU32 legend_colour = faded(KB_KEY_LEGEND[key.colour], KB_LEGEND_ALPHA);
+        ImU32 legend_colour = faded(KB_KEY_LEGEND[key.colour], KEYCAP_LEGEND_ALPHA);
         ImVec2 legend_centre = centre + ImVec2(0, key.legend_dy * k);
         ImRect legend_box(legend_centre - ImVec2(12, 9) * k, legend_centre + ImVec2(12, 9) * k);
         if (key.icon_regions) {
