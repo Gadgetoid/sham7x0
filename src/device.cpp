@@ -42,6 +42,7 @@ const ImU32 BEZEL = IM_COL32(178, 189, 199, 255);
 const ImU32 BEZEL_EDGE = IM_COL32(112, 120, 126, 255);
 const ImU32 BEZEL_LIGHT = IM_COL32(226, 232, 236, 255);
 const ImU32 FRAME = IM_COL32(192, 203, 213, 255);
+const ImU32 TEAL_ICON = IM_COL32(176, 196, 196, 255);
 const ImU32 LABEL = IM_COL32(236, 240, 244, 255);
 const ImU32 PRINT = IM_COL32(52, 58, 64, 255);
 const ImU32 ICON_BLUE = IM_COL32(96, 172, 226, 255);
@@ -794,7 +795,7 @@ void paint_lid_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImV
 
     draw_recess(draw, pill(lid.light_box.Min - ImVec2(WELL_MARGIN, WELL_MARGIN) * u, lid.light_box.Max + ImVec2(WELL_MARGIN, WELL_MARGIN) * u), KEY_WELL, u);
     draw_key(draw, lid.light, TEAL_KEY, down[LID_LIGHT], u);
-    fill_lid_icon(draw, frame, LID_SHAPE_LIGHT_ICON, dip(down[LID_LIGHT]), LABEL);
+    fill_lid_icon(draw, frame, LID_SHAPE_LIGHT_ICON, dip(down[LID_LIGHT]), TEAL_ICON);
 
     erase_colour = faded(BEZEL, 0.9f);
     rub_mode = false;
@@ -806,7 +807,7 @@ void paint_lid_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImV
     rub_mode = false;
     centred_text(draw, ImVec2(lid.power_box.GetCenter().x, lid.menu_centre.y - 39 * u), 15.0f * u, PRINT, "POWER");
     draw_key(draw, lid.power, TEAL_KEY, down[LID_POWER], u);
-    fill_lid_icon(draw, frame, LID_SHAPE_POWER_ICON, dip(down[LID_POWER]), LABEL);
+    fill_lid_icon(draw, frame, LID_SHAPE_POWER_ICON, dip(down[LID_POWER]), TEAL_ICON);
 
     for (int index = 0; index < 2; index++) {
         const Shape &shape = index == 0 ? lid.up : lid.down;
