@@ -9,7 +9,8 @@ extern "C" {
 
 #define LCD_WIDTH  239
 #define LCD_HEIGHT 80
-#define LCD_MARGIN 3
+#define LCD_MARGIN_X 3
+#define LCD_MARGIN_Y 11
 
 typedef struct {
     uint32_t codepoint;

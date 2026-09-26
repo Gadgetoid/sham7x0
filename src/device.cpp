@@ -13,7 +13,7 @@
 
 #include "device.h"
 #include "keyboard_layout.h"
-#include "key_shapes.h"
+#include "lid_layout.h"
 #include "keys.h"
 #include "runtime.h"
 #include "lcd.h"
@@ -22,35 +22,19 @@ namespace {
 
 using Shape = std::vector<ImVec2>;
 
-const float GRID_W = LCD_WIDTH + 2 * LCD_MARGIN;
-const float GRID_H = LCD_HEIGHT + 2 * LCD_MARGIN;
+static_assert(LID_LCD_MARGIN_X == LCD_MARGIN_X && LID_LCD_MARGIN_Y == LCD_MARGIN_Y, "make lid and lcd.h disagree on the LCD margin");
+const float GRID_W = LCD_WIDTH + 2 * LCD_MARGIN_X;
+const float GRID_H = LCD_HEIGHT + 2 * LCD_MARGIN_Y;
 const float REFERENCE_LCD_H = 282.0f;
-const float LEFT_EXTENT = 202.0f;
-const float RIGHT_EXTENT = 214.0f;
-const float TOP_EXTENT = 91.0f;
-const float BOTTOM_EXTENT = 48.0f;
+const float LEFT_EXTENT = LID_LEFT_EXTENT;
+const float RIGHT_EXTENT = LID_RIGHT_EXTENT;
+const float TOP_EXTENT = LID_TOP_EXTENT;
+const float BOTTOM_EXTENT = LID_BOTTOM_EXTENT;
 const float PLAIN_BEZEL = 30.0f;
 const float SCREEN_MARGIN = 8.0f;
 const ImU32 SCRATCH_TINT = IM_COL32(214, 232, 224, 120);
 const ImU32 CASE_SCRATCH_TINT = IM_COL32(246, 249, 251, 150);
-const float FLUTE_MARGIN = 3.5f;
 const float WELL_MARGIN = 4.0f;
-const float ARROW_WELL_MARGIN = 4.0f;
-const ImVec2 ARROW_CENTRE(181.1f, 113.5f);
-const float ARROW_R = 80.5f;
-const float ARROW_GAP_Y = 113.5f;
-const float ARROW_HALF_GAP = 6.8f;
-const float ARROW_EDGE_X = 179.2f;
-const float ARROW_EDGE_R = 560.0f;
-const float ARROW_CORNER = 11.0f;
-const float ARROW_GAP_CORNER = 6.0f;
-const float ARROW_WELL_TUCK = 3.0f;
-const float ARROW_WELL_FLAT = -91.06f;
-const float ARROW_KEY_FLAT = -86.06f;
-const float ARROW_SOFTNESS = 6.0f;
-const float ARROW_WELL_CORNER = 12.0f;
-const float FLUTE_REACH = 0.45f;
-const float SIDE_KEY_CORNER = 6.0f;
 const uint64_t REPEAT_DELAY_MS = 400;
 const uint64_t REPEAT_RATE_MS = 80;
 
@@ -79,8 +63,6 @@ const ButtonStyle TEAL_KEY = { IM_COL32(68, 150, 140, 255), IM_COL32(30, 102, 96
 const unsigned ICON_CALL = 0xe0b0;
 const unsigned ICON_CALENDAR = 0xebcc;
 const unsigned ICON_NOTE = 0xf1fc;
-const unsigned ICON_LIGHT = 0xe518;
-const unsigned ICON_POWER = 0xe8ac;
 
 SDL_Texture *lcd_texture = nullptr;
 SDL_Texture *grime_texture = nullptr;
@@ -111,6 +93,10 @@ struct Frame {
 
     ImVec2 at(float x, float y, bool right) const {
         return ImVec2((right ? lcd_max.x : lcd_min.x) + x * u, lcd_min.y + y * u);
+    }
+
+    ImVec2 lid(float x, float y) const {
+        return ImVec2((lcd_min.x + lcd_max.x) * 0.5f + x * u, lcd_min.y + y * u);
     }
 };
 
@@ -287,13 +273,6 @@ Shape translated(const Shape &shape, ImVec2 offset) {
     return result;
 }
 
-Shape circle(ImVec2 centre, float radius) {
-    Shape shape;
-    add_arc(shape, centre, radius, 0, 2 * IM_PI, 48);
-    shape.pop_back();
-    return shape;
-}
-
 Shape pill(ImVec2 a, ImVec2 b) {
     float r = (b.y - a.y) * 0.5f;
     Shape shape;
@@ -311,52 +290,8 @@ Shape side_key(ImVec2 a, ImVec2 b, float corner) {
     return shape;
 }
 
-Shape capsule(ImVec2 from, float from_r, ImVec2 to, float to_r) {
-    ImVec2 axis = to - from;
-    float distance = sqrtf(axis.x * axis.x + axis.y * axis.y);
-    float theta = atan2f(axis.y, axis.x);
-    float phi = asinf((from_r - to_r) / distance);
-    float alpha = theta + IM_PI * 0.5f - phi;
-    float beta = theta - IM_PI * 0.5f + phi;
-    Shape shape;
-    add_arc(shape, from, from_r, alpha, beta + 2 * IM_PI, 48);
-    add_arc(shape, to, to_r, beta + 2 * IM_PI, alpha + 2 * IM_PI, 48);
-    return shape;
-}
-
-Shape smooth(const Shape &shape, int passes) {
-    Shape result = shape;
-    for (int pass = 0; pass < passes; pass++) {
-        Shape next;
-        size_t count = result.size();
-        for (size_t i = 0; i < count; i++) {
-            ImVec2 a = result[i], b = result[(i + 1) % count];
-            next.push_back(a * 0.75f + b * 0.25f);
-            next.push_back(a * 0.25f + b * 0.75f);
-        }
-        result = next;
-    }
-    return result;
-}
-
 float cross(ImVec2 o, ImVec2 a, ImVec2 b) {
     return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-}
-
-Shape hull(Shape points) {
-    std::sort(points.begin(), points.end(), [](ImVec2 a, ImVec2 b) { return a.x < b.x || (a.x == b.x && a.y < b.y); });
-    Shape result(points.size() * 2);
-    size_t k = 0;
-    for (size_t i = 0; i < points.size(); i++) {
-        while (k >= 2 && cross(result[k - 2], result[k - 1], points[i]) <= 0) k--;
-        result[k++] = points[i];
-    }
-    for (size_t i = points.size() - 1, t = k + 1; i > 0; i--) {
-        while (k >= t && cross(result[k - 2], result[k - 1], points[i - 1]) <= 0) k--;
-        result[k++] = points[i - 1];
-    }
-    result.resize(k - 1);
-    return result;
 }
 
 Shape grown(const Shape &shape, float margin) {
@@ -377,121 +312,6 @@ float signed_area(const Shape &shape) {
     float area = 0;
     for (size_t i = 0; i < shape.size(); i++) area += cross(ImVec2(0, 0), shape[i], shape[(i + 1) % shape.size()]);
     return area;
-}
-
-Shape clip(const Shape &shape, ImVec2 point, ImVec2 outward) {
-    Shape result;
-    size_t count = shape.size();
-    for (size_t i = 0; i < count; i++) {
-        ImVec2 a = shape[i], b = shape[(i + 1) % count];
-        float da = (a.x - point.x) * outward.x + (a.y - point.y) * outward.y;
-        float db = (b.x - point.x) * outward.x + (b.y - point.y) * outward.y;
-        if (da <= 0) result.push_back(a);
-        if ((da <= 0) != (db <= 0)) result.push_back(a + (b - a) * (da / (da - db)));
-    }
-    return result;
-}
-
-Shape clip_convex(Shape shape, const Shape &window) {
-    float orientation = signed_area(window) > 0 ? 1.0f : -1.0f;
-    for (size_t i = 0; i < window.size() && !shape.empty(); i++) {
-        ImVec2 a = window[i], b = window[(i + 1) % window.size()];
-        ImVec2 edge = b - a;
-        shape = clip(shape, a, ImVec2(edge.y, -edge.x) * orientation);
-    }
-    return shape;
-}
-
-Shape rounded(const Shape &shape, float radius) {
-    float orientation = signed_area(shape) > 0 ? 1.0f : -1.0f;
-    Shape inner = shape;
-    for (size_t i = 0; i < shape.size() && !inner.empty(); i++) {
-        ImVec2 a = shape[i], b = shape[(i + 1) % shape.size()];
-        ImVec2 edge = b - a;
-        float length = sqrtf(edge.x * edge.x + edge.y * edge.y);
-        if (length < 1e-4f) continue;
-        ImVec2 outward = ImVec2(edge.y, -edge.x) * (orientation / length);
-        inner = clip(inner, a - outward * radius, outward);
-    }
-    if (inner.size() < 3) return shape;
-    Shape result;
-    size_t count = inner.size();
-    for (size_t i = 0; i < count; i++) {
-        ImVec2 before = inner[(i + count - 1) % count], at = inner[i], after = inner[(i + 1) % count];
-        ImVec2 e0 = at - before, e1 = after - at;
-        float from = atan2f(-e0.x * orientation, e0.y * orientation);
-        float to = atan2f(-e1.x * orientation, e1.y * orientation);
-        if (orientation > 0) { while (to < from) to += 2 * IM_PI; }
-        else { while (to > from) to -= 2 * IM_PI; }
-        int steps = std::max(1, (int)(fabsf(to - from) / 0.12f));
-        for (int step = 0; step <= steps; step++) {
-            float angle = from + (to - from) * step / steps;
-            result.push_back(at + ImVec2(cosf(angle), sinf(angle)) * radius);
-        }
-    }
-    return result;
-}
-
-Shape reference_circle(ImVec2 centre, float radius, int segments) {
-    Shape shape;
-    for (int i = 0; i < segments; i++) {
-        float angle = 2 * IM_PI * i / segments;
-        shape.push_back(centre + ImVec2(cosf(angle), sinf(angle)) * radius);
-    }
-    return shape;
-}
-
-float ease_flat(float x, float flat_x) {
-    return flat_x + ARROW_SOFTNESS * logf(expf((x - flat_x) / ARROW_SOFTNESS) + 1.0f);
-}
-
-Shape arrow_region(bool up, float grow, float extend = 0) {
-    Shape shape = reference_circle(ARROW_CENTRE, ARROW_R + grow, 180);
-    float near_y = up ? ARROW_GAP_Y - ARROW_HALF_GAP + grow + extend : ARROW_GAP_Y + ARROW_HALF_GAP - grow - extend;
-    shape = clip(shape, ImVec2(0, near_y), ImVec2(0, up ? 1.0f : -1.0f));
-    Shape edge = reference_circle(ImVec2(ARROW_EDGE_X + grow - ARROW_EDGE_R, ARROW_GAP_Y), ARROW_EDGE_R, 720);
-    shape = clip_convex(shape, edge);
-    for (ImVec2 &point : shape) point.x = ease_flat(point.x, ARROW_CENTRE.x + ARROW_KEY_FLAT);
-    return shape;
-}
-
-Shape arrow_key(bool up) {
-    Shape shape = rounded(arrow_region(up, 0, ARROW_CORNER * 2), ARROW_CORNER);
-    float gap_y = up ? ARROW_GAP_Y - ARROW_HALF_GAP : ARROW_GAP_Y + ARROW_HALF_GAP;
-    shape = clip(shape, ImVec2(0, gap_y), ImVec2(0, up ? 1.0f : -1.0f));
-    return rounded(shape, ARROW_GAP_CORNER);
-}
-
-Shape arrow_well() {
-    float radius = ARROW_R + ARROW_WELL_MARGIN + 1.0f;
-    float edge_x = ARROW_EDGE_X + ARROW_WELL_MARGIN + ARROW_WELL_TUCK + 10.0f;
-    Shape shape;
-    for (int i = 0; i <= 90; i++) {
-        float angle = IM_PI * 0.5f + IM_PI * i / 90;
-        ImVec2 point = ARROW_CENTRE + ImVec2(cosf(angle), sinf(angle)) * radius;
-        point.x = ease_flat(point.x, ARROW_CENTRE.x + ARROW_WELL_FLAT);
-        shape.push_back(point);
-    }
-    shape.push_back(ImVec2(edge_x, ARROW_CENTRE.y - radius));
-    shape.push_back(ImVec2(edge_x, ARROW_CENTRE.y + radius));
-    return rounded(shape, ARROW_WELL_CORNER);
-}
-
-
-Shape to_screen(const Frame &frame, const Shape &reference, bool right) {
-    Shape shape;
-    for (const ImVec2 &point : reference) shape.push_back(frame.at(point.x, point.y, right));
-    return shape;
-}
-
-Shape traced(const Frame &frame, const char *name) {
-    for (const TracedKey &key : traced_keys) {
-        if (strcmp(key.name, name) != 0) continue;
-        Shape shape;
-        for (int i = 0; i < key.count; i++) shape.push_back(frame.at(key.points[i * 2], key.points[i * 2 + 1], key.right));
-        return smooth(hull(shape), 2);
-    }
-    return Shape();
 }
 
 ImRect bounds(const Shape &shape) {
@@ -828,38 +648,64 @@ void finger_grime(ImDrawList *draw, const Shape &shape, float amount, float u) {
 
 enum { LID_SIDE, LID_LIGHT = 5, LID_MENU, LID_POWER, LID_UP, LID_DOWN, LID_ESC, LID_ENTER, LID_KEY_COUNT };
 
-const char *const SIDE_NAMES[] = { "main", "tel", "cal", "memo", "prog" };
-
 struct LidLayout {
     ImRect side_boxes[5];
-    Shape side[5];
+    Shape side[5], flute[5];
     ImRect light_box;
     Shape light;
     ImVec2 menu_centre, esc_centre, enter_centre;
-    Shape menu, esc, enter, power, up, down;
+    Shape menu, esc, enter, power, up, down, power_flute, menu_well, arrow_well, esc_well;
     ImRect power_box;
 };
+
+std::vector<Shape> lid_regions(const Frame &frame, const LidShape &shape, ImVec2 offset = ImVec2(0, 0)) {
+    std::vector<Shape> regions;
+    const float *point = shape.points;
+    for (int region = 0; region < shape.regions; region++) {
+        Shape polygon;
+        for (int i = 0; i < shape.counts[region]; i++, point += 2) polygon.push_back(frame.lid(point[0], point[1]) + offset);
+        regions.push_back(polygon);
+    }
+    return regions;
+}
+
+Shape lid_shape(const Frame &frame, const LidShape &shape) {
+    Shape polygon = lid_regions(frame, shape)[0];
+    if (signed_area(polygon) < 0) std::reverse(polygon.begin(), polygon.end());
+    return polygon;
+}
+
+void fill_lid_icon(ImDrawList *draw, const Frame &frame, const LidShape &shape, ImVec2 offset, ImU32 colour) {
+    for (const Shape &polygon : lid_regions(frame, shape, offset)) draw->AddConcavePolyFilled(polygon.data(), (int)polygon.size(), colour);
+}
 
 LidLayout lid_layout(const Frame &frame) {
     float u = frame.u;
     LidLayout lid;
+    const LidShape *sides[] = { &LID_SHAPE_SIDE_0, &LID_SHAPE_SIDE_1, &LID_SHAPE_SIDE_2, &LID_SHAPE_SIDE_3, &LID_SHAPE_SIDE_4 };
+    const LidShape *flutes[] = { &LID_SHAPE_FLUTE_0, &LID_SHAPE_FLUTE_1, &LID_SHAPE_FLUTE_2, &LID_SHAPE_FLUTE_3, &LID_SHAPE_FLUTE_4 };
     for (int index = 0; index < 5; index++) {
-        lid.side_boxes[index] = bounds(traced(frame, SIDE_NAMES[index]));
-        lid.side[index] = side_key(lid.side_boxes[index].Min, lid.side_boxes[index].Max, SIDE_KEY_CORNER * u);
+        lid.side[index] = lid_shape(frame, *sides[index]);
+        lid.side_boxes[index] = bounds(lid.side[index]);
+        lid.flute[index] = lid_shape(frame, *flutes[index]);
     }
-    lid.light_box = bounds(traced(frame, "light"));
-    lid.light = pill(lid.light_box.Min, lid.light_box.Max);
-    lid.menu_centre = frame.at(fit_menu[0], fit_menu[1], true);
-    lid.esc_centre = frame.at(fit_esc[0], fit_esc[1], true);
-    lid.enter_centre = frame.at(fit_enter[0], fit_enter[1], true);
-    lid.menu = circle(lid.menu_centre, fit_menu[2] * u);
-    lid.esc = circle(lid.esc_centre, fit_esc[2] * u);
-    lid.enter = circle(lid.enter_centre, fit_enter[2] * u);
-    lid.power = pill(frame.at(fit_power[0] - fit_power[2], fit_power[1] - fit_power[3], true),
-                     frame.at(fit_power[0] + fit_power[2], fit_power[1] + fit_power[3], true));
+    lid.light = lid_shape(frame, LID_SHAPE_LIGHT);
+    lid.light_box = bounds(lid.light);
+    lid.menu = lid_shape(frame, LID_SHAPE_MENU);
+    lid.esc = lid_shape(frame, LID_SHAPE_ESC);
+    lid.enter = lid_shape(frame, LID_SHAPE_ENTER);
+    lid.menu_centre = bounds(lid.menu).GetCenter();
+    lid.esc_centre = bounds(lid.esc).GetCenter();
+    lid.enter_centre = bounds(lid.enter).GetCenter();
+    lid.power = lid_shape(frame, LID_SHAPE_POWER);
     lid.power_box = bounds(lid.power);
-    lid.up = to_screen(frame, arrow_key(true), true);
-    lid.down = to_screen(frame, arrow_key(false), true);
+    lid.power_flute = lid_shape(frame, LID_SHAPE_POWER_FLUTE);
+    lid.menu_well = lid_shape(frame, LID_SHAPE_MENU_WELL);
+    lid.up = lid_shape(frame, LID_SHAPE_UP);
+    lid.down = lid_shape(frame, LID_SHAPE_DOWN);
+    lid.arrow_well = lid_shape(frame, LID_SHAPE_ARROW_WELL);
+    lid.esc_well = lid_shape(frame, LID_SHAPE_ESC_WELL);
+    (void)u;
     return lid;
 }
 
@@ -905,22 +751,14 @@ void paint_lid_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImV
     draw->PushClipRect(device_min, device_max, true);
     for (int index = 0; index < 5; index++) {
         const ImRect &box = lid.side_boxes[index];
-        float reach = box.GetHeight() * FLUTE_REACH;
-        Shape scoop = side_key(ImVec2(box.Min.x - reach, box.Min.y - FLUTE_MARGIN * u),
-                               ImVec2(box.Max.x + FLUTE_MARGIN * u, box.Max.y + FLUTE_MARGIN * u),
-                               (SIDE_KEY_CORNER + FLUTE_MARGIN) * u);
-        draw_recess(draw, scoop, FLUTE_RECESS, u, Mask{ box.Min.x - reach, box.Min.x + box.GetHeight() * 0.2f });
+        ImRect scoop = bounds(lid.flute[index]);
+        draw_recess(draw, lid.flute[index], FLUTE_RECESS, u, Mask{ scoop.Min.x, box.Min.x + box.GetHeight() * 0.2f });
     }
     {
-        float reach = lid.power_box.GetHeight() * FLUTE_REACH;
-        Shape scoop = pill(lid.power_box.Min - ImVec2(FLUTE_MARGIN, FLUTE_MARGIN) * u,
-                           ImVec2(lid.power_box.Max.x + reach, lid.power_box.Max.y + FLUTE_MARGIN * u));
-        draw_recess(draw, scoop, FLUTE_RECESS, u, Mask{ lid.power_box.Max.x + reach, lid.power_box.Max.x - lid.power_box.GetHeight() * 0.2f });
+        ImRect scoop = bounds(lid.power_flute);
+        draw_recess(draw, lid.power_flute, FLUTE_RECESS, u, Mask{ scoop.Max.x, lid.power_box.Max.x - lid.power_box.GetHeight() * 0.2f });
     }
-    {
-        Shape well = to_screen(frame, arrow_well(), true);
-        draw_recess(draw, well, KEY_WELL, u, Mask{ bounds(well).Max.x, frame.at(ARROW_EDGE_X - 4.0f, 0, true).x });
-    }
+    draw_recess(draw, lid.arrow_well, KEY_WELL, u);
     draw->PopClipRect();
     const float side_wear[] = { 0.7f, 0.45f, 0.45f, 0.5f, 1.0f };
     for (int index = 0; index < 5; index++) finger_grime(draw, lid.side[index], side_wear[index], u);
@@ -943,33 +781,28 @@ void paint_lid_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImV
 
     draw_recess(draw, pill(lid.light_box.Min - ImVec2(WELL_MARGIN, WELL_MARGIN) * u, lid.light_box.Max + ImVec2(WELL_MARGIN, WELL_MARGIN) * u), KEY_WELL, u);
     draw_key(draw, lid.light, TEAL_KEY, down[LID_LIGHT], u);
-    icon(draw, lid.light_box.GetCenter() + dip(down[LID_LIGHT]), 34.0f * u, LABEL, ICON_LIGHT);
+    fill_lid_icon(draw, frame, LID_SHAPE_LIGHT_ICON, dip(down[LID_LIGHT]), LABEL);
 
     erase_colour = faded(BEZEL, 0.9f);
     rub_mode = false;
     centred_text(draw, lid.menu_centre - ImVec2(0, 39 * u), 15.0f * u, PRINT, "MENU");
-    draw_recess(draw, circle(lid.menu_centre, (fit_menu[2] + WELL_MARGIN + 2.5f) * u), KEY_WELL, u);
+    draw_recess(draw, lid.menu_well, KEY_WELL, u);
     draw_key(draw, lid.menu, DARK_DOMED_KEY, down[LID_MENU], u);
 
     erase_colour = faded(BEZEL, 0.9f);
     rub_mode = false;
     centred_text(draw, ImVec2(lid.power_box.GetCenter().x, lid.menu_centre.y - 39 * u), 15.0f * u, PRINT, "POWER");
     draw_key(draw, lid.power, TEAL_KEY, down[LID_POWER], u);
-    icon(draw, lid.power_box.GetCenter() + dip(down[LID_POWER]), 32.0f * u, LABEL, ICON_POWER);
+    fill_lid_icon(draw, frame, LID_SHAPE_POWER_ICON, dip(down[LID_POWER]), LABEL);
 
     for (int index = 0; index < 2; index++) {
         const Shape &shape = index == 0 ? lid.up : lid.down;
         bool pressed = down[LID_UP + index];
         draw_key(draw, shape, BLUE_KEY, pressed, u);
-        ImRect box = bounds(shape);
-        ImVec2 centre = ImVec2(box.GetCenter().x + 3.0f * u, box.GetCenter().y + (index == 0 ? 4.0f : -4.0f) * u) + dip(pressed);
-        float dy = index == 0 ? 1.0f : -1.0f;
-        ImVec2 chevron[3] = { centre + ImVec2(-19.0f * u, 8.0f * u * dy), centre + ImVec2(0, -8.0f * u * dy),
-                              centre + ImVec2(19.0f * u, 8.0f * u * dy) };
-        draw->AddPolyline(chevron, 3, IM_COL32(222, 228, 234, 235), 0, 2.6f * u);
+        fill_lid_icon(draw, frame, index == 0 ? LID_SHAPE_UP_ICON : LID_SHAPE_DOWN_ICON, dip(pressed), IM_COL32(222, 228, 234, 235));
     }
 
-    draw_recess(draw, capsule(lid.esc_centre, (fit_esc[2] + 6) * u, lid.enter_centre, (fit_enter[2] + 6) * u), FLAT_WELL, u);
+    draw_recess(draw, lid.esc_well, FLAT_WELL, u);
     draw_key(draw, lid.esc, DARK_KEY, down[LID_ESC], u);
     centred_text(draw, lid.esc_centre + dip(down[LID_ESC]), 15.0f * u, LABEL, "ESC");
     draw_key(draw, lid.enter, DARK_KEY, down[LID_ENTER], u);
@@ -1585,13 +1418,13 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     draw->AddRect(device_min + ImVec2(2, 2), device_max - ImVec2(2, 2), BEZEL_LIGHT, rounding - 2, 0, 1.0f);
 
     if (state.show_keys) {
-        ImVec2 frame_min = image_min - ImVec2(20, 18) * u, frame_max = image_max + ImVec2(20, 20) * u;
-        draw->AddRectFilled(frame_min, frame_max, FRAME, 12.0f * u);
-        draw->AddRect(frame_min, frame_max, BEZEL_LIGHT, 12.0f * u, 0, 1.5f);
-        draw->AddRect(frame_min + ImVec2(1, 1), frame_max + ImVec2(1, 1), BEZEL_EDGE, 12.0f * u, 0, 1.0f);
+        Frame lid_frame{ image_min, image_max, u };
+        ImVec2 frame_min = lid_frame.lid(LID_FRAME[0], LID_FRAME[1]), frame_max = lid_frame.lid(LID_FRAME[2], LID_FRAME[3]);
+        draw->AddRectFilled(frame_min, frame_max, FRAME, LID_FRAME_RADIUS * u);
+        draw->AddRect(frame_min, frame_max, BEZEL_LIGHT, LID_FRAME_RADIUS * u, 0, 1.5f);
+        draw->AddRect(frame_min + ImVec2(1, 1), frame_max + ImVec2(1, 1), BEZEL_EDGE, LID_FRAME_RADIUS * u, 0, 1.0f);
     }
-    draw->AddRectFilled(image_min - ImVec2(5, 5), image_max + ImVec2(5, 5), IM_COL32(58, 64, 68, 255), 5.0f);
-    draw->AddRect(image_min - ImVec2(5, 5), image_max + ImVec2(5, 5), IM_COL32(210, 216, 220, 255), 5.0f, 0, 1.0f);
+    draw->AddRectFilled(image_min - ImVec2(2, 2), image_max + ImVec2(2, 2), IM_COL32(58, 64, 68, 255), 3.0f);
     if (state.show_keys) {
         float brand = 24.0f * u;
         ImVec2 at = image_min + ImVec2(-4 * u, -50 * u);

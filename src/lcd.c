@@ -4,8 +4,8 @@
 
 #include "lcd.h"
 
-#define GRID_W (LCD_WIDTH + 2 * LCD_MARGIN)
-#define GRID_H (LCD_HEIGHT + 2 * LCD_MARGIN)
+#define GRID_W (LCD_WIDTH + 2 * LCD_MARGIN_X)
+#define GRID_H (LCD_HEIGHT + 2 * LCD_MARGIN_Y)
 
 uint8_t lcd_framebuffer[LCD_WIDTH * LCD_HEIGHT];
 
@@ -401,7 +401,7 @@ bool lcd_compose(float seconds) {
     memset(ink_grid, 0, sizeof ink_grid);
     for (int y = 0; y < LCD_HEIGHT; y++) {
         for (int x = 0; x < LCD_WIDTH; x++) {
-            ink_grid[(y + LCD_MARGIN) * GRID_W + x + LCD_MARGIN] = shown[y * LCD_WIDTH + x];
+            ink_grid[(y + LCD_MARGIN_Y) * GRID_W + x + LCD_MARGIN_X] = shown[y * LCD_WIDTH + x];
         }
     }
 
@@ -418,7 +418,7 @@ bool lcd_compose(float seconds) {
         int shadow_y = y - shadow_offset;
         int shadow_grid_y = shadow_y >= 0 ? shadow_y / cell : -1;
         int shadow_sub_y = shadow_y >= 0 ? shadow_y % cell : 0;
-        bool row_in_panel = grid_y >= LCD_MARGIN && grid_y < LCD_MARGIN + LCD_HEIGHT;
+        bool row_in_panel = grid_y >= LCD_MARGIN_Y && grid_y < LCD_MARGIN_Y + LCD_HEIGHT;
 
         float soft_v = (y + 0.5f) / cell - 0.5f - soft_offset;
         int soft_y0 = max_int(0, min_int(GRID_H - 1, (int)floorf(soft_v)));
@@ -433,7 +433,7 @@ bool lcd_compose(float seconds) {
         uint32_t *out_row = &output[(size_t)y * output_w];
         for (int x = 0; x < output_w; x++) {
             int grid_x = x / cell, sub_x = x % cell;
-            bool in_panel = row_in_panel && grid_x >= LCD_MARGIN && grid_x < LCD_MARGIN + LCD_WIDTH;
+            bool in_panel = row_in_panel && grid_x >= LCD_MARGIN_X && grid_x < LCD_MARGIN_X + LCD_WIDTH;
             bool electrode = in_panel && is_electrode(sub_x, sub_y, gap);
             float ink = electrode ? ink_grid[grid_y * GRID_W + grid_x] : 0.0f;
 
