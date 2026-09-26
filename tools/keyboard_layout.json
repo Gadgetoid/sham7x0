@@ -1007,7 +1007,7 @@
    "code": "ESC",
    "legend": {
     "text": "ESC",
-    "size": 18.5,
+    "size": 21.83,
     "dy": -1.0
    },
    "secondary": []
@@ -1029,7 +1029,7 @@
    "code": "DIGIT_1",
    "legend": {
     "text": "1",
-    "size": 21.0,
+    "size": 24.15,
     "dy": -1.0
    },
    "secondary": [
@@ -1058,7 +1058,7 @@
    "code": "DIGIT_2",
    "legend": {
     "text": "2",
-    "size": 21.0,
+    "size": 24.15,
     "dy": -1.0
    },
    "secondary": [
@@ -1087,7 +1087,7 @@
    "code": "DIGIT_3",
    "legend": {
     "text": "3",
-    "size": 21.0,
+    "size": 24.15,
     "dy": -1.0
    },
    "secondary": [
@@ -1116,7 +1116,7 @@
    "code": "DIGIT_4",
    "legend": {
     "text": "4",
-    "size": 21.0,
+    "size": 24.15,
     "dy": -1.0
    },
    "secondary": [
@@ -1145,7 +1145,7 @@
    "code": "DIGIT_5",
    "legend": {
     "text": "5",
-    "size": 21.0,
+    "size": 24.15,
     "dy": -1.0
    },
    "secondary": [
@@ -1174,7 +1174,7 @@
    "code": "DIGIT_6",
    "legend": {
     "text": "6",
-    "size": 21.0,
+    "size": 24.15,
     "dy": -1.0
    },
    "secondary": [
@@ -1203,7 +1203,7 @@
    "code": "DIGIT_7",
    "legend": {
     "text": "7",
-    "size": 21.0,
+    "size": 24.15,
     "dy": -1.0
    },
    "secondary": [
@@ -1232,7 +1232,7 @@
    "code": "DIGIT_8",
    "legend": {
     "text": "8",
-    "size": 21.0,
+    "size": 24.15,
     "dy": -1.0
    },
    "secondary": [
@@ -1261,7 +1261,7 @@
    "code": "DIGIT_9",
    "legend": {
     "text": "9",
-    "size": 21.0,
+    "size": 24.15,
     "dy": -1.0
    },
    "secondary": [
@@ -1290,7 +1290,7 @@
    "code": "DIGIT_0",
    "legend": {
     "text": "0",
-    "size": 21.0,
+    "size": 24.15,
     "dy": -1.0
    },
    "secondary": [
@@ -1319,7 +1319,7 @@
    "code": "Q",
    "legend": {
     "text": "Q",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1348,7 +1348,7 @@
    "code": "W",
    "legend": {
     "text": "W",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1377,7 +1377,7 @@
    "code": "E",
    "legend": {
     "text": "E",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1406,7 +1406,7 @@
    "code": "R",
    "legend": {
     "text": "R",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1435,7 +1435,7 @@
    "code": "T",
    "legend": {
     "text": "T",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1464,7 +1464,7 @@
    "code": "Y",
    "legend": {
     "text": "Y",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": []
@@ -1486,7 +1486,7 @@
    "code": "U",
    "legend": {
     "text": "U",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": []
@@ -1508,7 +1508,7 @@
    "code": "I",
    "legend": {
     "text": "I",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1537,7 +1537,7 @@
    "code": "O",
    "legend": {
     "text": "O",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1566,7 +1566,7 @@
    "code": "P",
    "legend": {
     "text": "P",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1618,7 +1618,7 @@
    "code": "A",
    "legend": {
     "text": "A",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": []
@@ -1640,7 +1640,7 @@
    "code": "S",
    "legend": {
     "text": "S",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1669,7 +1669,7 @@
    "code": "D",
    "legend": {
     "text": "D",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": []
@@ -1691,7 +1691,7 @@
    "code": "F",
    "legend": {
     "text": "F",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1726,7 +1726,7 @@
    "code": "G",
    "legend": {
     "text": "G",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": []
@@ -1748,7 +1748,7 @@
    "code": "H",
    "legend": {
     "text": "H",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": []
@@ -1770,7 +1770,7 @@
    "code": "J",
    "legend": {
     "text": "J",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1804,7 +1804,7 @@
    "code": "K",
    "legend": {
     "text": "K",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1833,7 +1833,7 @@
    "code": "L",
    "legend": {
     "text": "L",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1914,7 +1914,7 @@
    "code": "Z",
    "legend": {
     "text": "Z",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": []
@@ -1936,7 +1936,7 @@
    "code": "X",
    "legend": {
     "text": "X",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1965,7 +1965,7 @@
    "code": "C",
    "legend": {
     "text": "C",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -1994,7 +1994,7 @@
    "code": "V",
    "legend": {
     "text": "V",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -2023,7 +2023,7 @@
    "code": "B",
    "legend": {
     "text": "B",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -2052,7 +2052,7 @@
    "code": "N",
    "legend": {
     "text": "N",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -2081,7 +2081,7 @@
    "code": "M",
    "legend": {
     "text": "M",
-    "size": 23.5,
+    "size": 26.32,
     "dy": -1.2
    },
    "secondary": [
@@ -2110,7 +2110,7 @@
    "code": "COMMA",
    "legend": {
     "text": ",",
-    "size": 30.0,
+    "size": 33.6,
     "dy": -1.2
    },
    "secondary": [
@@ -2145,7 +2145,7 @@
    "code": "PERIOD",
    "legend": {
     "text": ".",
-    "size": 30.0,
+    "size": 33.6,
     "dy": -1.2
    },
    "secondary": [
@@ -2203,7 +2203,7 @@
    "code": "FN_2ND",
    "legend": {
     "text": "2nd",
-    "size": 19.5,
+    "size": 22.42,
     "dy": -1.0
    },
    "secondary": [],
@@ -2233,7 +2233,7 @@
     "text": "MENU",
     "size": 18.5,
     "dy": -1.0,
-    "stretch": 0.95
+    "stretch": 0.8
    },
    "secondary": [
     {
@@ -2261,7 +2261,7 @@
    "code": "NEW",
    "legend": {
     "text": "NEW",
-    "size": 18.5,
+    "size": 21.27,
     "dy": -1.0
    },
    "secondary": [
@@ -2290,7 +2290,7 @@
    "code": "SMBL",
    "legend": {
     "icon": "box_down",
-    "size": 19.5,
+    "size": 22.42,
     "dy": -1.0
    },
    "secondary": [
@@ -2378,8 +2378,9 @@
    "code": "ENTER",
    "legend": {
     "text": "ENTER",
-    "size": 17.8,
-    "dy": -1.0
+    "size": 21.27,
+    "dy": -1.0,
+    "stretch": 0.8
    },
    "secondary": []
   },

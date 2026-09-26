@@ -1015,18 +1015,40 @@ void stretched_text(ImDrawList *draw, ImFont *font, float size, const char *text
     }
 }
 
+void ink_extent(ImFont *font, float size, const char *text, float &ink_left, float &ink_right) {
+    ImFontBaked *baked = font->GetFontBaked(size);
+    float scale = size / baked->Size;
+    float pen = 0;
+    ink_left = FLT_MAX;
+    ink_right = 0;
+    for (const char *cursor = text; *cursor;) {
+        unsigned codepoint = 0;
+        cursor += ImTextCharFromUtf8(&codepoint, cursor, nullptr);
+        ImFontGlyph *glyph = baked->FindGlyph((ImWchar)codepoint);
+        if (!glyph) continue;
+        if (glyph->Visible) {
+            ink_left = std::min(ink_left, pen + glyph->X0 * scale);
+            ink_right = std::max(ink_right, pen + glyph->X1 * scale);
+        }
+        pen += glyph->AdvanceX * scale;
+    }
+    if (ink_left > ink_right) ink_left = ink_right = 0;
+}
+
 ImRect centred_legend(ImDrawList *draw, ImFont *font, float size, const char *text, ImVec2 centre, ImU32 colour, float stretch) {
     unsigned first = 0;
     ImTextCharFromUtf8(&first, text, nullptr);
     bool own_glyph = text[1] == 0 || strcmp(text, "−") == 0;
     unsigned reference = own_glyph ? first : 'H';
     float middle = glyph_middle(font, size, reference);
-    float width = stretched_width(font, size, text, stretch);
-    float left = centre.x - width * 0.5f;
+    float ink_left, ink_right;
+    ink_extent(font, size, text, ink_left, ink_right);
+    float width = (ink_right - ink_left) * stretch;
+    float left = centre.x - (ink_left + ink_right) * 0.5f * stretch;
     float top = centre.y - middle;
     stretched_text(draw, font, size, text, left, top, colour, stretch);
     float half_height = glyph_middle(font, size, 'H') - font->GetFontBaked(size)->FindGlyph('H')->Y0 * size / font->GetFontBaked(size)->Size;
-    return ImRect(left, centre.y - half_height, left + width, centre.y + half_height);
+    return ImRect(centre.x - width * 0.5f, centre.y - half_height, centre.x + width * 0.5f, centre.y + half_height);
 }
 
 void label_on_baseline(ImDrawList *draw, ImFont *font, float size, const char *text, float cx, float baseline, ImU32 colour, float stretch) {
@@ -1451,8 +1473,18 @@ void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const
         ImVec2 legend_centre = centre + ImVec2(0, key.legend_dy * k);
         ImRect legend_box(legend_centre - ImVec2(12, 9) * k, legend_centre + ImVec2(12, 9) * k);
         if (key.icon_regions) {
-            if (key.legend) centred_legend(draw, keyboard_font(false), key.legend_size * k, key.legend, centre + ImVec2(1.0f, -6.5f) * k * key.h / KEY_REFERENCE_H,
-                                           legend_colour, KB_LEGEND_STRETCH);
+            if (key.legend) {
+                float icon_left = FLT_MAX, icon_right = -FLT_MAX;
+                for (int i = 0; i < key.icon_counts[0]; i++) {
+                    icon_left = std::min(icon_left, key.icon_points[i * 2]);
+                    icon_right = std::max(icon_right, key.icon_points[i * 2]);
+                }
+                float ink_left, ink_right;
+                ink_extent(keyboard_font(false), key.legend_size * k, key.legend, ink_left, ink_right);
+                float fitted = KB_LEGEND_STRETCH * (icon_right - icon_left) * k / std::max(1.0f, (ink_right - ink_left) * KB_LEGEND_STRETCH);
+                ImVec2 at = ImVec2(frame.at((icon_left + icon_right) * 0.5f, 0).x + dip.x, centre.y - 6.5f * k * key.h / KEY_REFERENCE_H);
+                centred_legend(draw, keyboard_font(false), key.legend_size * k, key.legend, at, legend_colour, fitted);
+            }
             const float *point = key.icon_points;
             for (int region = 0; region < key.icon_regions; region++) {
                 Shape polygon = traced_points(frame, point, key.icon_counts[region], dip);
