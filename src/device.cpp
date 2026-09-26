@@ -576,6 +576,9 @@ const RecessPalette FINGER_SCOOP = { IM_COL32(66, 76, 84, 255), IM_COL32(214, 22
 const ImU32 SLOPE_SHADE = IM_COL32(78, 86, 92, 255);
 const ImU32 SLOPE_LIT = IM_COL32(236, 240, 242, 255);
 const float KEY_HOLE_GAP = 2.2f;
+const float HOMING_DROP = 0.4f;
+const float HOMING_HALF_W = 8.4f;
+const float HOMING_HALF_H = 2.25f;
 const float KEY_HOLE_EDGE_WIDTH = 1.1f;
 const ImU32 KEY_HOLE_DARK = IM_COL32(14, 16, 18, 255);
 const ImU32 KEY_HOLE_EDGE = IM_COL32(236, 240, 242, 230);
@@ -1429,7 +1432,8 @@ void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const
         ImVec2 centre = frame.at(key.x, key.y) + dip;
         ImU32 face = mix(style.top, style.bottom, 0.5f);
         if (key.homing) {
-            Shape bar = pill(centre + ImVec2(-6.75f, 12.5f - 1.8f) * k, centre + ImVec2(6.75f, 12.5f + 1.8f) * k);
+            float bar_y = key.h * HOMING_DROP;
+            Shape bar = pill(centre + ImVec2(-HOMING_HALF_W, bar_y - HOMING_HALF_H) * k, centre + ImVec2(HOMING_HALF_W, bar_y + HOMING_HALF_H) * k);
             ImU32 ridge_side = mix(style.bottom, IM_COL32(0, 0, 0, 255), 0.18f);
             for (int step = 3; step >= 1; step--) fill(draw, translated(bar, ImVec2(0, step * 0.35f * k)), ridge_side, ridge_side);
             fill(draw, bar, lighten(style.top, 6), mix(style.top, style.bottom, 0.45f));

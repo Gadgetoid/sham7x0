@@ -129,6 +129,9 @@ def apply_svg(keys, layout, path):
         outline = [mapped(p) for p in shapes[si]]
         x0, y0, x1, y1 = bounds(outline)
         key = keys[ki]
+        growth = (y1 - y0) / key["h"]
+        key["legend"]["size"] *= growth
+        key["legend"]["dy"] *= growth
         key.update(x=(x0 + x1) / 2, y=(y0 + y1) / 2, w=x1 - x0, h=y1 - y0, outline=outline)
     outer, inner = sorted(circles, key=lambda c: -c[2])
     well = layout["recesses"][0]
