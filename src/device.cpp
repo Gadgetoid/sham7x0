@@ -676,8 +676,42 @@ Shape lid_shape(const Frame &frame, const LidShape &shape) {
     return polygon;
 }
 
+bool point_in(const Shape &polygon, ImVec2 point) {
+    bool inside = false;
+    for (size_t i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
+        const ImVec2 &a = polygon[i], &b = polygon[j];
+        if ((a.y > point.y) != (b.y > point.y) && point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    return inside;
+}
+
+void fringe(ImDrawList *draw, const Shape &contour, float direction, ImU32 colour) {
+    size_t count = contour.size();
+    float width = draw->_FringeScale;
+    float orientation = signed_area(contour) > 0 ? 1.0f : -1.0f;
+    ImU32 clear = colour & ~IM_COL32_A_MASK;
+    draw->PrimReserve((int)count * 6, (int)count * 2);
+    ImVec2 uv = draw->_Data->TexUvWhitePixel;
+    ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
+    for (size_t i = 0; i < count; i++) {
+        ImVec2 before = contour[(i + count - 1) % count], at = contour[i], after = contour[(i + 1) % count];
+        ImVec2 n0(before.y - at.y, at.x - before.x), n1(at.y - after.y, after.x - at.x);
+        float l0 = sqrtf(n0.x * n0.x + n0.y * n0.y), l1 = sqrtf(n1.x * n1.x + n1.y * n1.y);
+        ImVec2 normal = (l0 > 0 ? n0 / l0 : ImVec2(0, 0)) + (l1 > 0 ? n1 / l1 : ImVec2(0, 0));
+        float length = sqrtf(normal.x * normal.x + normal.y * normal.y);
+        normal = length > 0 ? normal * (orientation * direction / length) : ImVec2(0, 0);
+        draw->PrimWriteVtx(at, uv, colour);
+        draw->PrimWriteVtx(at + normal * width, uv, clear);
+    }
+    for (size_t i = 0; i < count; i++) {
+        ImDrawIdx a = (ImDrawIdx)(base + i * 2), b = (ImDrawIdx)(base + ((i + 1) % count) * 2);
+        draw->PrimWriteIdx(a); draw->PrimWriteIdx(b); draw->PrimWriteIdx((ImDrawIdx)(b + 1));
+        draw->PrimWriteIdx(a); draw->PrimWriteIdx((ImDrawIdx)(b + 1)); draw->PrimWriteIdx((ImDrawIdx)(a + 1));
+    }
+}
+
 template <typename Map>
-void fill_triangles(ImDrawList *draw, const float *triangles, int count, const std::vector<Shape> &contours, Map map, ImU32 colour, float edge) {
+void fill_triangles(ImDrawList *draw, const float *triangles, int count, const std::vector<Shape> &contours, Map map, ImU32 colour) {
     draw->PrimReserve(count * 3, count * 3);
     ImVec2 uv = draw->_Data->TexUvWhitePixel;
     ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
@@ -685,12 +719,18 @@ void fill_triangles(ImDrawList *draw, const float *triangles, int count, const s
         draw->PrimWriteVtx(map(triangles[i * 2], triangles[i * 2 + 1]), uv, colour);
         draw->PrimWriteIdx((ImDrawIdx)(base + i));
     }
-    for (const Shape &contour : contours) draw->AddPolyline(contour.data(), (int)contour.size(), colour, ImDrawFlags_Closed, edge);
+    for (size_t i = 0; i < contours.size(); i++) {
+        int depth = 0;
+        for (size_t j = 0; j < contours.size(); j++) {
+            if (j != i && point_in(contours[j], contours[i][0])) depth++;
+        }
+        fringe(draw, contours[i], depth % 2 ? -1.0f : 1.0f, colour);
+    }
 }
 
 void fill_lid_icon(ImDrawList *draw, const Frame &frame, const LidShape &shape, ImVec2 offset, ImU32 colour) {
     fill_triangles(draw, shape.triangles, shape.triangle_count, lid_regions(frame, shape, offset),
-                   [&](float x, float y) { return frame.lid(x, y) + offset; }, colour, 0.6f);
+                   [&](float x, float y) { return frame.lid(x, y) + offset; }, colour);
 }
 
 LidLayout lid_layout(const Frame &frame) {
@@ -1339,7 +1379,7 @@ void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const
                 point += key.icon_counts[region] * 2;
             }
             fill_triangles(draw, key.icon_triangles, key.icon_triangle_count, contours,
-                           [&](float x, float y) { return frame.at(x, y) + dip; }, legend_colour, 0.6f);
+                           [&](float x, float y) { return frame.at(x, y) + dip; }, legend_colour);
         } else if (key.icon == KB_ICON_NONE && key.legend) {
             legend_box = centred_legend(draw, keyboard_font(false), key.legend_size * k, key.legend, legend_centre, legend_colour,
                                         KB_LEGEND_STRETCH * key.stretch);
