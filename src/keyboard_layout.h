@@ -52,11 +52,8 @@ static const float KB_FINGER_Y = 280.50f;
 static const float KB_FINGER_W = 402.00f;
 static const float KB_FINGER_H = 19.00f;
 static const float KB_WELL_X = 878.65f;
-static const float KB_WELL_Y = 224.00f;
-static const float KB_WELL_R = 35.00f;
-static const float KB_CURSOR_DEPTH = 33.000f;
-static const float KB_CURSOR_EXPONENT = 2.20f;
-static const float KB_CURSOR_CORNER = 3.50f;
+static const float KB_WELL_Y = 226.00f;
+static const float KB_WELL_R = 39.50f;
 static const float KB_LABEL_CLEARANCE = 3.20f;
 static const float KB_LEGEND_ALPHA = 0.88f;
 static const float KB_LEGEND_STRETCH = 1.140f;
@@ -123,8 +120,8 @@ static const KeyboardKey keyboard_keys[] = {
     { "space", 481.14f, 237.20f, 184.40f, 35.00f, KB_SHAPE_PILL, 0, KB_LIGHT, "SPACE", KB_ICON_NONE, 18.50f, -1.20f, 1.00f, 0x20, 0x0, 0xd, KB_ACTION_KEY, false, false, false, 1.00f, 1, { { "✓", KB_PURPLE, 15.00f, 0.00f, KB_ICON_CHECK }, { nullptr, 0, 0.0f, 0.0f, 0 } } },
     { "minus", 627.80f, 237.20f, 63.00f, 35.00f, KB_SHAPE_PILL, 0, KB_DARK, "−", KB_ICON_NONE, 26.00f, -1.00f, 1.00f, 0x2d, 0x5f, 0x0, KB_ACTION_KEY, false, false, false, 0.35f, 1, { { "_", KB_GREY, 15.00f, 0.00f, KB_ICON_NONE }, { nullptr, 0, 0.0f, 0.0f, 0 } } },
     { "enter", 721.65f, 237.20f, 82.60f, 35.00f, KB_SHAPE_PILL, 0, KB_DARK, "ENTER", KB_ICON_NONE, 17.80f, -1.00f, 1.00f, 0xd, 0x0, 0x0, KB_ACTION_KEY, false, false, false, 0.80f, 0, { { nullptr, 0, 0.0f, 0.0f, 0 }, { nullptr, 0, 0.0f, 0.0f, 0 } } },
-    { "up", 878.65f, 203.00f, 35.00f, 35.00f, KB_SHAPE_CURSOR, 3, KB_BLUE, nullptr, KB_ICON_TRIANGLE, 0.00f, -1.00f, 1.00f, 0x100, 0x0, 0x0, KB_ACTION_KEY, false, false, false, 0.70f, 0, { { nullptr, 0, 0.0f, 0.0f, 0 }, { nullptr, 0, 0.0f, 0.0f, 0 } } },
-    { "left", 836.65f, 245.00f, 35.00f, 35.00f, KB_SHAPE_CURSOR, 2, KB_BLUE, nullptr, KB_ICON_TRIANGLE, 0.00f, -1.00f, 1.00f, 0x102, 0x0, 0x0, KB_ACTION_KEY, false, false, false, 0.60f, 0, { { nullptr, 0, 0.0f, 0.0f, 0 }, { nullptr, 0, 0.0f, 0.0f, 0 } } },
+    { "up", 878.65f, 199.00f, 35.00f, 35.00f, KB_SHAPE_CURSOR, 3, KB_BLUE, nullptr, KB_ICON_TRIANGLE, 0.00f, -1.00f, 1.00f, 0x100, 0x0, 0x0, KB_ACTION_KEY, false, false, false, 0.70f, 0, { { nullptr, 0, 0.0f, 0.0f, 0 }, { nullptr, 0, 0.0f, 0.0f, 0 } } },
+    { "left", 832.65f, 245.00f, 35.00f, 35.00f, KB_SHAPE_CURSOR, 2, KB_BLUE, nullptr, KB_ICON_TRIANGLE, 0.00f, -1.00f, 1.00f, 0x102, 0x0, 0x0, KB_ACTION_KEY, false, false, false, 0.60f, 0, { { nullptr, 0, 0.0f, 0.0f, 0 }, { nullptr, 0, 0.0f, 0.0f, 0 } } },
     { "down", 878.65f, 245.00f, 35.00f, 35.00f, KB_SHAPE_CURSOR, 1, KB_BLUE, nullptr, KB_ICON_TRIANGLE, 0.00f, -1.00f, 1.00f, 0x101, 0x0, 0x0, KB_ACTION_KEY, false, false, false, 0.75f, 0, { { nullptr, 0, 0.0f, 0.0f, 0 }, { nullptr, 0, 0.0f, 0.0f, 0 } } },
-    { "right", 920.65f, 245.00f, 35.00f, 35.00f, KB_SHAPE_CURSOR, 0, KB_BLUE, nullptr, KB_ICON_TRIANGLE, 0.00f, -1.00f, 1.00f, 0x103, 0x0, 0x0, KB_ACTION_KEY, false, false, false, 0.60f, 0, { { nullptr, 0, 0.0f, 0.0f, 0 }, { nullptr, 0, 0.0f, 0.0f, 0 } } },
+    { "right", 924.65f, 245.00f, 35.00f, 35.00f, KB_SHAPE_CURSOR, 0, KB_BLUE, nullptr, KB_ICON_TRIANGLE, 0.00f, -1.00f, 1.00f, 0x103, 0x0, 0x0, KB_ACTION_KEY, false, false, false, 0.60f, 0, { { nullptr, 0, 0.0f, 0.0f, 0 }, { nullptr, 0, 0.0f, 0.0f, 0 } } },
 };

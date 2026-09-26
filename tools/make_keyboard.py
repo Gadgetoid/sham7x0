@@ -1,10 +1,10 @@
 import json
 import sys
 
-CURSOR_GAP = 7.0
-CURSOR_WELL_MARGIN = 0.0
-CURSOR_WELL_SCALE = 1.0
-CURSOR_WELL_DROP = 0.0
+CURSOR_GAP_X = 11.0
+CURSOR_GAP_Y = 11.0
+CURSOR_WELL_MARGIN = 3.0
+CURSOR_WELL_DROP = 4.0
 
 KEY_BACKSPACE = 8
 KEY_ENTER = 13
@@ -69,16 +69,17 @@ def colour(values):
 def respace_cursor(keys, layout):
     cursor = {key["id"]: key for key in keys if key["kind"] == "cursor"}
     down = cursor["down"]
-    pitch = down["w"] + CURSOR_GAP
-    cursor["left"]["x"] = down["x"] - pitch
-    cursor["right"]["x"] = down["x"] + pitch
+    pitch_x = down["w"] + CURSOR_GAP_X
+    pitch_y = down["h"] + CURSOR_GAP_Y
+    cursor["left"]["x"] = down["x"] - pitch_x
+    cursor["right"]["x"] = down["x"] + pitch_x
     cursor["left"]["y"] = cursor["right"]["y"] = down["y"]
     cursor["up"]["x"] = down["x"]
-    cursor["up"]["y"] = down["y"] - pitch
+    cursor["up"]["y"] = down["y"] - pitch_y
     well = layout["recesses"][0]
     well["x"] = down["x"]
-    well["y"] = down["y"] - pitch / 2 + CURSOR_WELL_DROP
-    well["r"] = down["w"] * CURSOR_WELL_SCALE + CURSOR_WELL_MARGIN
+    well["y"] = down["y"] - pitch_y / 2 + CURSOR_WELL_DROP
+    well["r"] = down["y"] + down["h"] / 2 - well["y"] + CURSOR_WELL_MARGIN
 
 
 def key_codes(key):
@@ -125,7 +126,6 @@ def main():
     respace_cursor(keys, layout)
     keyboard = layout["keyboard"]
     colours = layout["colours"]
-    cursor_kind = layout["kinds"]["cursor"]
     well = layout["recesses"][0]
     lines = [
         "#pragma once",
@@ -184,9 +184,6 @@ def main():
         "static const float KB_WELL_X = {:.2f}f;".format(well["x"]),
         "static const float KB_WELL_Y = {:.2f}f;".format(well["y"]),
         "static const float KB_WELL_R = {:.2f}f;".format(well["r"]),
-        "static const float KB_CURSOR_DEPTH = {:.3f}f;".format(cursor_kind["depth"]),
-        "static const float KB_CURSOR_EXPONENT = {:.2f}f;".format(cursor_kind["exponent"]),
-        "static const float KB_CURSOR_CORNER = {:.2f}f;".format(cursor_kind["corner"]),
         "static const float KB_LABEL_CLEARANCE = {:.2f}f;".format(layout["label_clearance"]),
         "static const float KB_LEGEND_ALPHA = {:.2f}f;".format(layout["fonts"]["alpha"]),
         "static const float KB_LEGEND_STRETCH = {:.3f}f;".format(layout["fonts"]["legend"]["stretch"]),

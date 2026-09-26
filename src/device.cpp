@@ -571,11 +571,11 @@ struct RecessPalette {
 
 const RecessPalette LID_RECESS = { IM_COL32(104, 112, 118, 255), IM_COL32(238, 242, 246, 255), IM_COL32(146, 154, 160, 255),
                                    IM_COL32(188, 195, 199, 255), IM_COL32(178, 186, 191, 255) };
-const RecessPalette KEYBED_WELL = { IM_COL32(68, 76, 82, 255), IM_COL32(238, 242, 246, 255), IM_COL32(118, 126, 132, 255),
-                                    IM_COL32(172, 180, 184, 255), IM_COL32(160, 168, 172, 255) };
 const RecessPalette FINGER_SCOOP = { IM_COL32(66, 76, 84, 255), IM_COL32(214, 224, 230, 255), IM_COL32(84, 96, 104, 255),
                                      IM_COL32(138, 150, 158, 255), IM_COL32(120, 132, 140, 255) };
-const RecessStyle CURSOR_WELL = { 0.5f, 2.2f, 1.0f };
+const float CURSOR_SLOPE = 3.4f;
+const ImU32 SLOPE_SHADE = IM_COL32(78, 86, 92, 255);
+const ImU32 SLOPE_LIT = IM_COL32(236, 240, 242, 255);
 const RecessStyle KEY_HOLE = { 0.6f, 1.4f, 1.0f };
 const RecessPalette KEY_HOLE_PALETTE = { IM_COL32(112, 120, 124, 255), IM_COL32(236, 240, 242, 255), IM_COL32(150, 158, 160, 255),
                                          IM_COL32(160, 166, 166, 255), IM_COL32(152, 160, 160, 255) };
@@ -585,6 +585,31 @@ ImU32 mix(ImU32 a, ImU32 b, float t) {
     t = std::max(0.0f, std::min(1.0f, t));
     auto channel = [&](int shift) { return (int)(((a >> shift) & 0xff) * (1 - t) + ((b >> shift) & 0xff) * t); };
     return IM_COL32(channel(IM_COL32_R_SHIFT), channel(IM_COL32_G_SHIFT), channel(IM_COL32_B_SHIFT), channel(IM_COL32_A_SHIFT));
+}
+
+void draw_slope_ring(ImDrawList *draw, ImVec2 centre, float radius, float slope, ImU32 floor) {
+    const int segments = 96;
+    draw->PrimReserve(segments * 6, segments * 2);
+    ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
+    ImVec2 uv = draw->_Data->TexUvWhitePixel;
+    for (int i = 0; i < segments; i++) {
+        float angle = 2 * IM_PI * i / segments;
+        ImVec2 normal(cosf(angle), sinf(angle));
+        ImU32 colour = normal.y < 0 ? mix(floor, SLOPE_SHADE, powf(-normal.y, 0.7f)) : mix(floor, SLOPE_LIT, powf(normal.y, 0.7f) * 0.85f);
+        draw->PrimWriteVtx(centre + normal * radius, uv, colour);
+        draw->PrimWriteVtx(centre + normal * (radius - slope), uv, colour);
+    }
+    for (int i = 0; i < segments; i++) {
+        ImDrawIdx a = (ImDrawIdx)(base + i * 2), b = (ImDrawIdx)(base + ((i + 1) % segments) * 2);
+        draw->PrimWriteIdx(a); draw->PrimWriteIdx(b); draw->PrimWriteIdx((ImDrawIdx)(b + 1));
+        draw->PrimWriteIdx(a); draw->PrimWriteIdx((ImDrawIdx)(b + 1)); draw->PrimWriteIdx((ImDrawIdx)(a + 1));
+    }
+    Shape rim;
+    for (int i = 0; i < segments; i++) {
+        float angle = 2 * IM_PI * i / segments;
+        rim.push_back(centre + ImVec2(cosf(angle), sinf(angle)) * radius);
+    }
+    draw->AddPolyline(rim.data(), (int)rim.size(), IM_COL32(80, 88, 94, 90), ImDrawFlags_Closed, 0.6f);
 }
 
 void draw_recess(ImDrawList *draw, const Shape &shape, const RecessStyle &style, float u, Mask mask = Mask(),
@@ -952,8 +977,6 @@ const float KB_PAD_X = 16.0f;
 const float KEY_TRAVEL = 2.6f;
 const float KEY_SHOULDER = 4.0f;
 const float KB_SQUARE_CORNER = 0.22f;
-const float WELL_SQUASH = 0.9f;
-const float WELL_DEPTH = 3.5f;
 const float KB_PAD_TOP = 12.0f;
 const float KB_PAD_BOTTOM = 10.0f;
 const float KB_BOTTOM_MARGIN = 6.0f;
@@ -1017,22 +1040,26 @@ Shape rounded_box(ImVec2 a, ImVec2 b, float top_radius, float bottom_radius) {
     return shape;
 }
 
-Shape cursor_outline(float length, float breadth, float depth, float exponent, float corner) {
-    depth = std::min(std::max(depth, 1.0f), length - corner);
-    corner = std::min(corner, breadth * 0.5f);
-    Shape points;
-    float centre_x = length * 0.5f - depth;
-    for (int i = 0; i <= 96; i++) {
-        float angle = -IM_PI * 0.5f + IM_PI * i / 96;
-        float c = cosf(angle), s = sinf(angle);
-        float x = depth * copysignf(powf(fabsf(c), 2.0f / exponent), c);
-        float y = breadth * 0.5f * copysignf(powf(fabsf(s), 2.0f / exponent), s);
-        points.push_back(ImVec2(centre_x + x, y));
+void cubic(Shape &shape, ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, int steps) {
+    for (int i = 1; i <= steps; i++) {
+        float t = (float)i / steps, m = 1 - t;
+        shape.push_back(p0 * (m * m * m) + p1 * (3 * m * m * t) + p2 * (3 * m * t * t) + p3 * (t * t * t));
     }
-    for (float sign : { -1.0f, 1.0f }) {
-        add_arc(points, ImVec2(-length * 0.5f + corner, sign * (breadth * 0.5f - corner)), corner, 0, 2 * IM_PI, 24);
+}
+
+Shape cursor_outline(float length, float breadth) {
+    const float width = 82.0f, height = 82.04f, corner = 9.33f, side_end = 18.87f;
+    Shape half;
+    add_arc(half, ImVec2(corner, corner), corner, IM_PI * 1.5f, IM_PI, 12);
+    half.push_back(ImVec2(0, side_end));
+    cubic(half, ImVec2(0, side_end), ImVec2(0, side_end + 37.81f), ImVec2(18.35f, height), ImVec2(width * 0.5f, height), 24);
+    Shape outline = half;
+    for (int i = (int)half.size() - 2; i >= 0; i--) outline.push_back(ImVec2(width - half[i].x, half[i].y));
+    Shape local;
+    for (const ImVec2 &point : outline) {
+        local.push_back(ImVec2(-length * 0.5f + point.y / height * length, -breadth * 0.5f + point.x / width * breadth));
     }
-    return hull(points);
+    return local;
 }
 
 template <typename ColourAt>
@@ -1080,7 +1107,7 @@ struct KeyboardFrame {
 
 Shape keyboard_key_shape(const KeyboardFrame &frame, const KeyboardKey &key) {
     if (key.shape == KB_SHAPE_CURSOR) {
-        Shape local = cursor_outline(key.w, key.h, KB_CURSOR_DEPTH, KB_CURSOR_EXPONENT, KB_CURSOR_CORNER);
+        Shape local = cursor_outline(key.w, key.h);
         float angle = key.round_side * IM_PI * 0.5f;
         float c = cosf(angle), s = sinf(angle);
         for (ImVec2 &point : local) point = ImVec2(point.x * c - point.y * s, point.x * s + point.y * c);
@@ -1293,21 +1320,8 @@ void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, bool wear) {
                 SCOOP_RECESS, k, Mask(), FINGER_SCOOP);
     {
         ImVec2 centre = frame.at(KB_WELL_X, KB_WELL_Y);
-        Shape well;
-        for (int i = 0; i < 64; i++) {
-            float angle = 2 * IM_PI * i / 64;
-            well.push_back(centre + ImVec2(cosf(angle) * KB_WELL_R, sinf(angle) * KB_WELL_R * WELL_SQUASH) * k);
-        }
         ImU32 shell = mix(lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(156, 164, 166, 255), 0.35f), 0.8f);
-        RecessPalette palette = { KEYBED_WELL.shade, KEYBED_WELL.lit, shell, shell, shell };
-        draw_recess(draw, well, CURSOR_WELL, k, Mask(), palette);
-        Shape floor = translated(inset(well, WELL_DEPTH * 1.3f * k), ImVec2(0, WELL_DEPTH * k));
-        const int rings = 5;
-        for (int ring = 0; ring < rings; ring++) {
-            float t = (float)(ring + 1) / rings;
-            Shape layer = inset(floor, (rings - 1 - ring) * 0.8f * k);
-            fill(draw, layer, faded(KEYBED_WELL.bowl_top, 0.25f * t), faded(KEYBED_WELL.bowl_bottom, 0.35f * t));
-        }
+        draw_slope_ring(draw, centre, KB_WELL_R * k, CURSOR_SLOPE * k, shell);
     }
 }
 
