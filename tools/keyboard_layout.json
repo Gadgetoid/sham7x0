@@ -75,7 +75,7 @@
    "h": 36.9
   },
   "shift": {
-   "shape": "pill",
+   "shape": "square_end",
    "w": 62.2,
    "h": 36.6
   },
@@ -98,8 +98,8 @@
    "shape": "d_key",
    "length": 35.0,
    "breadth": 35.0,
-   "depth": 28.378,
-   "exponent": 1.9,
+   "depth": 33.0,
+   "exponent": 2.2,
    "corner": 3.5
   }
  },
@@ -951,19 +951,19 @@
   },
   "blue": {
    "top": [
-    78,
-    118,
-    176
+    86,
+    112,
+    166
    ],
    "bottom": [
-    40,
-    72,
-    124
+    56,
+    80,
+    130
    ],
    "legend": [
-    206,
-    212,
-    220
+    240,
+    242,
+    244
    ]
   },
   "grey": [
@@ -1871,7 +1871,8 @@
    "id": "shift_left",
    "row": 4,
    "kind": "shift",
-   "shape": "pill",
+   "shape": "square_end",
+   "square_side": "left",
    "x": 57.8,
    "y": 187.3,
    "w": 62.2,
@@ -2166,7 +2167,8 @@
    "id": "shift_right",
    "row": 4,
    "kind": "shift",
-   "shape": "pill",
+   "shape": "square_end",
+   "square_side": "right",
    "x": 944.8,
    "y": 187.3,
    "w": 62.2,
@@ -2391,8 +2393,8 @@
    "w": 35.0,
    "h": 35.0,
    "round_side": "up",
-   "depth": 28.38,
-   "exponent": 1.9,
+   "depth": 33.0,
+   "exponent": 2.2,
    "corner": 3.5,
    "measured": {
     "x": 878.65,
@@ -2417,8 +2419,8 @@
    "w": 35.0,
    "h": 35.0,
    "round_side": "left",
-   "depth": 28.38,
-   "exponent": 1.9,
+   "depth": 33.0,
+   "exponent": 2.2,
    "corner": 3.5,
    "measured": {
     "x": 840.65,
@@ -2443,8 +2445,8 @@
    "w": 35.0,
    "h": 35.0,
    "round_side": "down",
-   "depth": 28.38,
-   "exponent": 1.9,
+   "depth": 33.0,
+   "exponent": 2.2,
    "corner": 3.5,
    "measured": {
     "x": 878.65,
@@ -2469,8 +2471,8 @@
    "w": 35.0,
    "h": 35.0,
    "round_side": "right",
-   "depth": 28.38,
-   "exponent": 1.9,
+   "depth": 33.0,
+   "exponent": 2.2,
    "corner": 3.5,
    "measured": {
     "x": 916.65,

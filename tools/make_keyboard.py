@@ -1,9 +1,10 @@
 import json
 import sys
 
-CURSOR_GAP = 10.0
+CURSOR_GAP = 7.0
 CURSOR_WELL_MARGIN = 0.0
-CURSOR_WELL_DROP = 4.0
+CURSOR_WELL_SCALE = 1.0
+CURSOR_WELL_DROP = 0.0
 
 KEY_BACKSPACE = 8
 KEY_ENTER = 13
@@ -45,7 +46,7 @@ LETTER_FREQUENCY = {
 KEY_WEAR = {"fn_2nd": 0.9, "space": 1.0, "enter": 0.8, "enter_wide": 0.8, "del": 0.85, "up": 0.7, "down": 0.75, "left": 0.6,
             "right": 0.6, "esc": 0.5, "menu": 0.85}
 
-SHAPES = {"pill": "KB_SHAPE_PILL", "d_key": "KB_SHAPE_CURSOR"}
+SHAPES = {"pill": "KB_SHAPE_PILL", "d_key": "KB_SHAPE_CURSOR", "square_end": "KB_SHAPE_SQUARE_END"}
 SIDES = {"right": 0, "down": 1, "left": 2, "up": 3}
 COLOURS = {"light": "KB_LIGHT", "dark": "KB_DARK", "2nd-outlined": "KB_DARK", "blue": "KB_BLUE"}
 SECONDARY_COLOURS = {"grey": "KB_GREY", "purple": "KB_PURPLE", "purple-badge": "KB_BADGE"}
@@ -77,7 +78,7 @@ def respace_cursor(keys, layout):
     well = layout["recesses"][0]
     well["x"] = down["x"]
     well["y"] = down["y"] - pitch / 2 + CURSOR_WELL_DROP
-    well["r"] = down["w"] + CURSOR_GAP / 2 + CURSOR_WELL_MARGIN
+    well["r"] = down["w"] * CURSOR_WELL_SCALE + CURSOR_WELL_MARGIN
 
 
 def key_codes(key):
@@ -131,7 +132,7 @@ def main():
         "",
         "#include <cstdint>",
         "",
-        "enum { KB_SHAPE_PILL, KB_SHAPE_CURSOR };",
+        "enum { KB_SHAPE_PILL, KB_SHAPE_CURSOR, KB_SHAPE_SQUARE_END };",
         "enum { KB_LIGHT, KB_DARK, KB_BLUE };",
         "enum { KB_GREY, KB_PURPLE, KB_BADGE };",
         "enum { KB_ICON_NONE, KB_ICON_BACKSPACE, KB_ICON_RETURN, KB_ICON_SHIFT, KB_ICON_BOX_DOWN, KB_ICON_TRIANGLE,",
@@ -215,7 +216,7 @@ def main():
             secondaries.append("{ nullptr, 0, 0.0f, 0.0f, 0 }")
         lines.append("    {{ {}, {:.2f}f, {:.2f}f, {:.2f}f, {:.2f}f, {}, {}, {}, {}, {}, {:.2f}f, {:.2f}f, {:.2f}f, 0x{:x}, 0x{:x}, 0x{:x}, {}, {}, {}, {}, {:.2f}f, {}, {{ {}, {} }} }},".format(
             c_string(key["id"]), key["x"], key["y"], key["w"], key["h"], SHAPES[key["shape"]],
-            SIDES.get(key.get("round_side", "right"), 0), COLOURS[key["colour"]], c_string(legend_spec.get("text")),
+            SIDES.get(key.get("round_side", key.get("square_side", "right")), 0), COLOURS[key["colour"]], c_string(legend_spec.get("text")),
             ICONS[legend_spec.get("icon", "")], legend_spec["size"], legend_spec["dy"], legend_spec.get("stretch", 1.0),
             normal, shift_code, second_code, action, "true" if is_letter else "false",
             "true" if "outline_ring" in key else "false", "true" if "homing_bar" in key else "false",
