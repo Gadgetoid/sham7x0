@@ -39,6 +39,7 @@ typedef struct {
 
 machine_t     *machine_create(const uint8_t *flash_image, size_t flash_size, machine_model_t model);
 machine_model_t machine_get_model(machine_t *machine);
+void           machine_set_backlight_timeout(machine_t *machine, bool enabled);
 void           machine_destroy(machine_t *machine);
 void           machine_reset(machine_t *machine);
 void           machine_run(machine_t *machine, uint32_t cycles);

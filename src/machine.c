@@ -23,6 +23,8 @@
 #define RAM_PAGES            (RAM_CHIP_PAGES * 2)
 #define LCD_CONTROL_PAGE     0x300
 #define FIXED_RAM_BASE       0xc000
+#define BACKLIGHT_SECONDS    0xc00d
+#define TIMEOUT_HOLD         30
 #define FIXED_RAM_FIRST_PAGE 0x402
 #define TICK_HZ              64
 
@@ -132,6 +134,7 @@ struct machine {
     uint32_t cycles_into_tick;
     rtc_t    rtc;
     uart_t   uart;
+    bool     backlight_timeout;
     uint8_t  screen[MACHINE_SCREEN_ROW_BYTES * MACHINE_SCREEN_HEIGHT];
     machine_log_fn log;
     uint32_t *pc_histogram;
@@ -622,6 +625,21 @@ static void update_interrupt_line(machine_t *machine) {
     machine->cpu.int_data = 0xff;
 }
 
+static uint8_t *fixed_ram(machine_t *machine, uint16_t address) {
+    return page_pointer(machine, window_page(machine, address)) + (address & (PAGE_SIZE - 1));
+}
+
+static void hold_timeouts(machine_t *machine) {
+    if (!machine->backlight_timeout) {
+        uint8_t *seconds = fixed_ram(machine, BACKLIGHT_SECONDS);
+        if (*seconds > TIMEOUT_HOLD) *seconds = 1;
+    }
+}
+
+void machine_set_backlight_timeout(machine_t *machine, bool enabled) {
+    machine->backlight_timeout = enabled;
+}
+
 void machine_run(machine_t *machine, uint32_t cycles) {
     const uint32_t cycles_per_tick = MACHINE_CLOCK_HZ / TICK_HZ;
     unsigned long end = machine->cpu.cyc + cycles;
@@ -649,6 +667,7 @@ void machine_run(machine_t *machine, uint32_t cycles) {
             machine->interrupt_status |= INTERRUPT_SECOND;
         }
     }
+    hold_timeouts(machine);
 }
 
 void machine_set_key(machine_t *machine, int column, int row, bool down) {

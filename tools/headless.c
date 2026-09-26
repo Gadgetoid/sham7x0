@@ -96,6 +96,7 @@ int main(int argc, char **argv) {
     int install_count = 0;
     double seconds = 3;
     bool trace_ports = false;
+    bool backlight_timeout = false;
     double profile_from = -1;
     int dump_page = -1;
     int watch_pc = -1;
@@ -128,6 +129,7 @@ int main(int argc, char **argv) {
         else if (strncmp(argv[i], "--install=", 10) == 0 && install_count < MACHINE_ADDIN_SLOTS) install_paths[install_count++] = argv[i] + 10;
         else if (strncmp(argv[i], "--keys=", 7) == 0) event_count = parse_keys(argv[i] + 7, events, 1024);
         else if (strcmp(argv[i], "--trace-ports") == 0) trace_ports = true;
+        else if (strcmp(argv[i], "--backlight-timeout") == 0) backlight_timeout = true;
         else if (strncmp(argv[i], "--profile=", 10) == 0) profile_from = atof(argv[i] + 10);
         else if (strncmp(argv[i], "--dump=", 7) == 0) {
             char path[512];
@@ -140,7 +142,7 @@ int main(int argc, char **argv) {
         else rom_path = argv[i];
     }
     if (!rom_path) {
-        fprintf(stderr, "usage: headless ROM [--seconds=N] [--pbm=FILE] [--load=STATE] [--save=STATE] [--trace-ports] [--keys=T:COL.ROW/HOLD,...] [--model=OZ-750|ZQ-770] [--serial[=LINK|DEVICE]] [--serial-log=FILE]\n");
+        fprintf(stderr, "usage: headless ROM [--seconds=N] [--pbm=FILE] [--load=STATE] [--save=STATE] [--trace-ports] [--keys=T:COL.ROW/HOLD,...] [--model=OZ-750|ZQ-770] [--serial[=LINK|DEVICE]] [--serial-log=FILE] [--backlight-timeout]\n");
         return 1;
     }
     size_t size = 0;
@@ -188,6 +190,7 @@ int main(int argc, char **argv) {
         free(wzd_data);
     }
     machine_set_trace_ports(machine, trace_ports);
+    machine_set_backlight_timeout(machine, backlight_timeout);
     machine_set_watch_pc(machine, watch_pc);
     serial_bridge_t *bridge = NULL;
     if (serial) {

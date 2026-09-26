@@ -114,6 +114,7 @@ static uint64_t sound_cursor = 0;
 static float sound_frequency = 0;
 static machine_lcd_t shown_lcd = { true, DEFAULT_CONTRAST, false };
 static serial_bridge_t *serial = NULL;
+static bool backlight_timeout = false;
 static pclink_t *links[MAX_LINKS];
 static int link_count = 0;
 static bool link_started = false;
@@ -500,6 +501,11 @@ static void step_link(void) {
     serial_attach(serial, machine);
 }
 
+void runtime_set_backlight_timeout(bool enabled) {
+    backlight_timeout = enabled;
+    if (machine) machine_set_backlight_timeout(machine, enabled);
+}
+
 bool runtime_transfer_progress(float *fraction, const char **description, int *waiting) {
     if (!link_count) return false;
     *fraction = link_started ? pclink_progress(links[0]) : 0.0f;
@@ -593,6 +599,7 @@ static bool start_machine(const char *rom_path, int model, const char *state_nam
     rom_image = image;
     rom_size = size;
     machine = created;
+    machine_set_backlight_timeout(machine, backlight_timeout);
     load_keycode_table();
     machine_set_log(machine, log_to_console);
     snprintf(state_path, sizeof state_path, "%s/%s", data_path, state_name);

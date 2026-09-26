@@ -142,6 +142,7 @@ void menu_install(void) {
     add_item(realism, MENU_DEAD_COLUMNS, @"Dead Columns", @"d", NSEventModifierFlagCommand);
     add_item(realism, MENU_SCRATCHES, @"Scratches", @"", 0);
     add_item(realism, MENU_WEAR, @"Wear", @"", 0);
+    add_item(realism, MENU_BACKLIGHT_TIMEOUT, @"Backlight Timeout", @"", 0);
 
     NSMenu *emulation = add_menu(@"Emulation");
     add_item(emulation, MENU_BACKLIGHT, @"Backlight", @"b", NSEventModifierFlagCommand);

@@ -95,6 +95,7 @@ struct Options {
     float response = 1.0f;
     bool scratches = true;
     bool wear = false;
+    bool backlight_timeout = false;
     bool touchscreen = false;
     std::string touch_display = "TETRA";
     std::vector<int> menu_items;
@@ -107,6 +108,7 @@ struct Settings {
     bool dead_columns;
     bool scratches;
     bool wear;
+    bool backlight_timeout;
     bool touchscreen;
     int fps;
     float response;
@@ -115,7 +117,7 @@ struct Settings {
 
     bool operator==(const Settings &other) const {
         return firmware == other.firmware && show_console == other.show_console && layout == other.layout &&
-               dead_columns == other.dead_columns && scratches == other.scratches && wear == other.wear && touchscreen == other.touchscreen && fps == other.fps && response == other.response &&
+               dead_columns == other.dead_columns && scratches == other.scratches && wear == other.wear && backlight_timeout == other.backlight_timeout && touchscreen == other.touchscreen && fps == other.fps && response == other.response &&
                width == other.width && height == other.height;
     }
 };
@@ -138,6 +140,7 @@ static void load_settings(const std::string &data, Options &options) {
         else if (name == "dead_columns") options.dead_columns = atoi(value) != 0;
         else if (name == "scratches") options.scratches = atoi(value) != 0;
         else if (name == "wear") options.wear = atoi(value) != 0;
+        else if (name == "backlight_timeout") options.backlight_timeout = atoi(value) != 0;
         else if (name == "touchscreen") options.touchscreen = atoi(value) != 0;
         else if (name == "fps") options.fps = atoi(value);
         else if (name == "response") options.response = (float)atof(value);
@@ -153,8 +156,8 @@ static void save_settings(const std::string &data, const Settings &settings) {
     std::string temporary = path + ".tmp";
     FILE *file = fopen(temporary.c_str(), "w");
     if (!file) return;
-    fprintf(file, "show_console=%d\nlayout=%d\ndead_columns=%d\nscratches=%d\nwear=%d\ntouchscreen=%d\nfps=%d\nresponse=%g\nwidth=%d\nheight=%d\n",
-            settings.show_console, settings.layout, settings.dead_columns, settings.scratches, settings.wear, settings.touchscreen, settings.fps,
+    fprintf(file, "show_console=%d\nlayout=%d\ndead_columns=%d\nscratches=%d\nwear=%d\nbacklight_timeout=%d\ntouchscreen=%d\nfps=%d\nresponse=%g\nwidth=%d\nheight=%d\n",
+            settings.show_console, settings.layout, settings.dead_columns, settings.scratches, settings.wear, settings.backlight_timeout, settings.touchscreen, settings.fps,
             settings.response, settings.width, settings.height);
     if (!settings.firmware.empty()) fprintf(file, "firmware=%s\n", settings.firmware.c_str());
     fclose(file);
@@ -174,7 +177,7 @@ static int menu_item_named(const std::string &name) {
         { "reload", MENU_RELOAD }, { "interrupt", MENU_INTERRUPT }, { "initialize", MENU_INITIALIZE }, { "test-mode", MENU_TEST_MODE }, { "show-console", MENU_SHOW_CONSOLE },
         { "focus-console", MENU_FOCUS_CONSOLE }, { "backlight", MENU_BACKLIGHT }, { "dead-columns", MENU_DEAD_COLUMNS },
         { "period", MENU_FPS_FIRST + 5 }, { "sound", MENU_SOUND },
-        { "next-layout", MENU_LAYOUT_NEXT }, { "apps", MENU_APP_BROWSER }, { "scratches", MENU_SCRATCHES }, { "wear", MENU_WEAR }, { "touchscreen", MENU_TOUCHSCREEN },
+        { "next-layout", MENU_LAYOUT_NEXT }, { "apps", MENU_APP_BROWSER }, { "scratches", MENU_SCRATCHES }, { "wear", MENU_WEAR }, { "backlight-timeout", MENU_BACKLIGHT_TIMEOUT }, { "touchscreen", MENU_TOUCHSCREEN },
     };
     for (auto &entry : names) {
         if (name == entry.first) return entry.second;
@@ -205,6 +208,7 @@ static void usage() {
         "  --response=N        LCD response time scale, 0 instant, 1 normal, 4 very slow\n"
         "  --menu=ITEMS        trigger menu items after boot: reload, interrupt, initialize, test-mode, show-console,\n"
         "                      focus-console, backlight, dead-columns, sound, period, apps,\n"
+        "                      backlight-timeout,\n"
         "                      show-keys\n"
         "  --keys=SEQUENCE     type into the device after boot, {DOWN} {ENTER} {F1}, {+LEFT} holds, {-LEFT} releases\n"
         "  --exec=COMMAND      run a console command after boot, repeatable (type help in the console)\n"
@@ -768,6 +772,7 @@ int main(int argc, char **argv) {
     bool persist = !options.fresh && (options.screenshot.empty() || getenv("POCKET_PERSIST"));
     std::string state_name = state_file_name(running_firmware, options.rom);
     host_config_t config = { options.rom.c_str(), options.data.c_str(), persist, machine_model(options.model), state_name.c_str() };
+    runtime_set_backlight_timeout(options.backlight_timeout);
     if (!runtime_init(&config)) return 1;
     for (auto &path : options.install) runtime_install_wzd(absolute(path).c_str());
     if (!options.serial.empty()) runtime_set_serial(options.serial == "pty" ? "pty" : absolute(options.serial).c_str());
@@ -906,6 +911,10 @@ int main(int argc, char **argv) {
                 case MENU_SOUND:        beeper_set_sound(!beeper_sound()); break;
                 case MENU_SCRATCHES:    device.scratches = !device.scratches; break;
                 case MENU_WEAR:         device.wear = !device.wear; break;
+                case MENU_BACKLIGHT_TIMEOUT:
+                    options.backlight_timeout = !options.backlight_timeout;
+                    runtime_set_backlight_timeout(options.backlight_timeout);
+                    break;
                 case MENU_TOUCHSCREEN:
                     want_touchscreen = !touch.active;
                     touch.reported_missing = false;
@@ -924,7 +933,7 @@ int main(int argc, char **argv) {
             static bool have_saved = false;
             int window_w = 0, window_h = 0;
             SDL_GetWindowSize(window, &window_w, &window_h);
-            Settings current = { running_firmware ? running_firmware->id : options.firmware, show_console, layout, lcd_get_dead_columns(), device.scratches, device.wear, want_touchscreen, fps, response,
+            Settings current = { running_firmware ? running_firmware->id : options.firmware, show_console, layout, lcd_get_dead_columns(), device.scratches, device.wear, options.backlight_timeout, want_touchscreen, fps, response,
                                  touch.active ? touch.windowed.w : window_w,
                                  touch.active ? touch.windowed.h : show_console ? window_h : restore_height };
             if (!have_saved) {
@@ -952,6 +961,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < MENU_LAYOUT_END - MENU_LAYOUT_FIRST; i++) menu_set_checked(MENU_LAYOUT_FIRST + i, layout == i);
         menu_set_checked(MENU_SCRATCHES, device.scratches);
         menu_set_checked(MENU_WEAR, device.wear);
+        menu_set_checked(MENU_BACKLIGHT_TIMEOUT, options.backlight_timeout);
         menu_set_checked(MENU_TOUCHSCREEN, touch.active);
         menu_set_serial(runtime_serial_target());
 
