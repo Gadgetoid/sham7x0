@@ -28,6 +28,7 @@ int history_pos = -1;
 char input[1024] = "";
 bool focus_requested = false;
 bool scroll_requested = false;
+bool changed = false;
 
 void trim() {
     if (lines.size() > MAX_LINES) {
@@ -39,6 +40,7 @@ void add_line(const std::string &text, LineKind kind) {
     lines.push_back({ text, kind });
     line_open = false;
     scroll_requested = true;
+    changed = true;
     trim();
 }
 
@@ -88,6 +90,7 @@ extern "C" void console_write(const char *text, size_t len) {
         lines.back().text.push_back(c);
     }
     scroll_requested = true;
+    changed = true;
     trim();
 }
 
@@ -111,6 +114,12 @@ extern "C" char *console_take_input(void) {
     char *source = strdup(pending.front().c_str());
     pending.pop_front();
     return source;
+}
+
+bool console_take_changed(void) {
+    bool was = changed;
+    changed = false;
+    return was;
 }
 
 void console_focus(void) {

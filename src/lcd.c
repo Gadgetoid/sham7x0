@@ -341,18 +341,31 @@ void lcd_set_response(float scale) {
     response_scale = scale;
 }
 
+static float pixel_target(int i) {
+    float target = powered ? lcd_framebuffer[i] / 3.0f : 0.0f;
+    if (powered) switch (column_fault[i % LCD_WIDTH]) {
+        case COLUMN_OFF:  target = 0.0f; break;
+        case COLUMN_ON:   target = 1.0f; break;
+        case COLUMN_WEAK: target *= 0.35f; break;
+        default: break;
+    }
+    return target;
+}
+
+bool lcd_needs_compose(void) {
+    if (force_compose) return true;
+    for (int i = 0; i < LCD_WIDTH * LCD_HEIGHT; i++) {
+        if (pixel_target(i) != shown[i]) return true;
+    }
+    return false;
+}
+
 static bool settle_pixels(float seconds) {
     float darken = response_scale > 0 ? 1.0f - expf(-seconds / (0.0209f * response_scale)) : 1.0f;
     float lighten = response_scale > 0 ? 1.0f - expf(-seconds / (0.0387f * response_scale)) : 1.0f;
     bool changed = false;
     for (int i = 0; i < LCD_WIDTH * LCD_HEIGHT; i++) {
-        float target = powered ? lcd_framebuffer[i] / 3.0f : 0.0f;
-        if (powered) switch (column_fault[i % LCD_WIDTH]) {
-            case COLUMN_OFF:  target = 0.0f; break;
-            case COLUMN_ON:   target = 1.0f; break;
-            case COLUMN_WEAK: target *= 0.35f; break;
-            default: break;
-        }
+        float target = pixel_target(i);
         float delta = target - shown[i];
         if (delta == 0.0f) continue;
         changed = true;

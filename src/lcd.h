@@ -42,6 +42,7 @@ int  lcd_measure(const lcd_font_t *font, const char *text, size_t len, int scale
 
 void      lcd_compose_setup(int cell);
 bool      lcd_compose(float seconds);
+bool      lcd_needs_compose(void);
 uint32_t *lcd_compose_pixels(void);
 int       lcd_compose_width(void);
 int       lcd_compose_height(void);

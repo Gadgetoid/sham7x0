@@ -15,6 +15,7 @@ char *console_take_input(void);
 }
 
 void console_draw(void);
+bool console_take_changed(void);
 void console_focus(void);
 void console_cancel(void);
 #endif
