@@ -22,9 +22,11 @@
 #include "browser.h"
 #include "console.h"
 #include "device.h"
+#include "firmware.h"
 #include "host.h"
 #include "keys.h"
 #include "lcd.h"
+#include "machine.h"
 #include "menu.h"
 #include "touch.h"
 #include "runtime.h"
@@ -51,10 +53,29 @@ extern "C" uint32_t host_ticks_ms(void) {
     return (uint32_t)(SDL_GetTicks() - start_ticks);
 }
 
+static std::string home_directory() {
+    const char *home = getenv("HOME");
+    return home && home[0] ? home : ".";
+}
+
+static std::string xdg_directory(const char *variable, const char *fallback) {
+    const char *value = getenv(variable);
+    std::string base = value && value[0] == '/' ? value : home_directory() + "/" + fallback;
+    return base + "/sham7x0";
+}
+
+static void make_directories(const std::string &path) {
+    for (size_t slash = path.find('/', 1); slash != std::string::npos; slash = path.find('/', slash + 1)) mkdir(path.substr(0, slash).c_str(), 0755);
+    mkdir(path.c_str(), 0755);
+}
+
 struct Options {
-    std::string rom = "rom/r162.da1";
-    std::string model = "OZ-750";
-    std::string data = "data";
+    std::string rom;
+    bool rom_given = false;
+    std::string firmware;
+    std::string model;
+    std::string data;
+    std::string config;
     std::string apps = "apps";
     std::vector<std::string> install;
     std::string serial;
@@ -80,6 +101,7 @@ struct Options {
 };
 
 struct Settings {
+    std::string firmware;
     bool show_console;
     int layout;
     bool dead_columns;
@@ -92,7 +114,7 @@ struct Settings {
     int height;
 
     bool operator==(const Settings &other) const {
-        return show_console == other.show_console && layout == other.layout &&
+        return firmware == other.firmware && show_console == other.show_console && layout == other.layout &&
                dead_columns == other.dead_columns && scratches == other.scratches && wear == other.wear && touchscreen == other.touchscreen && fps == other.fps && response == other.response &&
                width == other.width && height == other.height;
     }
@@ -121,6 +143,7 @@ static void load_settings(const std::string &data, Options &options) {
         else if (name == "response") options.response = (float)atof(value);
         else if (name == "width") options.width = atoi(value);
         else if (name == "height") options.height = atoi(value);
+        else if (name == "firmware") options.firmware = value;
     }
     fclose(file);
 }
@@ -133,12 +156,13 @@ static void save_settings(const std::string &data, const Settings &settings) {
     fprintf(file, "show_console=%d\nlayout=%d\ndead_columns=%d\nscratches=%d\nwear=%d\ntouchscreen=%d\nfps=%d\nresponse=%g\nwidth=%d\nheight=%d\n",
             settings.show_console, settings.layout, settings.dead_columns, settings.scratches, settings.wear, settings.touchscreen, settings.fps,
             settings.response, settings.width, settings.height);
+    if (!settings.firmware.empty()) fprintf(file, "firmware=%s\n", settings.firmware.c_str());
     fclose(file);
     rename(temporary.c_str(), path.c_str());
 }
 
 static std::string data_argument(int argc, char **argv) {
-    std::string data = "data";
+    std::string data;
     for (int i = 1; i < argc; i++) {
         if (strncmp(argv[i], "--data=", 7) == 0) data = argv[i] + 7;
     }
@@ -161,11 +185,11 @@ static int menu_item_named(const std::string &name) {
 static void usage() {
     printf(
         "usage: sham7x0 [options]\n"
-        "  --rom=FILE          firmware image (default rom/r162.da1)\n"
-        "  --data=DIR          settings and saved machine state (default data)\n"
+        "  --rom=FILE          firmware image (default: the last one picked in Emulation > Firmware, found by checksum in the ROM folder)\n"
+        "  --data=DIR          keep settings, ROMs (DIR/rom) and saved machines in DIR instead of the XDG directories\n"
         "  --fresh             ignore and do not write the saved machine state\n"
         "  --apps=DIR          App Browser catalogue and where Install .wzd starts looking (default apps)\n"
-        "  --model=NAME        model printed on the case: OZ-750 (default) or ZQ-770\n"
+        "  --model=NAME        hardware to emulate: OZ-750 or ZQ-770 (default: the firmware's own, else OZ-750)\n"
         "  --install=FILE      install a .wzd program after boot, repeatable\n"
         "  --serial[=TARGET]   connect the UART: a serial device such as /dev/cu.usbmodem1101, or a pty linked at TARGET\n"
         "  --size=WxH          window size (default 1400x900)\n"
@@ -202,7 +226,10 @@ static bool parse_options(int argc, char **argv, Options &options) {
             size_t len = strlen(prefix);
             return arg.compare(0, len, prefix) == 0 ? argv[i] + len : nullptr;
         };
-        if (const char *v = value("--rom=")) options.rom = v;
+        if (const char *v = value("--rom=")) {
+            options.rom = v;
+            options.rom_given = true;
+        }
         else if (const char *v = value("--data=")) options.data = v;
         else if (const char *v = value("--apps=")) options.apps = v;
         else if (const char *v = value("--model=")) options.model = v;
@@ -542,21 +569,141 @@ static void save_screenshot(SDL_Renderer *renderer, const std::string &path) {
     SDL_DestroySurface(surface);
 }
 
+static std::string grouped_hash(const char *hash) {
+    std::string text;
+    for (size_t i = 0; hash[i]; i++) {
+        if (i && i % 16 == 0) text += ' ';
+        text += hash[i];
+    }
+    return text;
+}
+
+static bool wait_for_firmware(SDL_Window *window, SDL_Renderer *renderer, const std::string &rom_directory, std::vector<FirmwareFile> &found,
+                              const std::string &screenshot, int frames) {
+    uint64_t last_scan = SDL_GetTicks();
+    for (int frame = 0; found.empty(); frame++) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            ImGui_ImplSDL3_ProcessEvent(&event);
+            if (event.type == SDL_EVENT_QUIT) return false;
+            if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(window)) return false;
+        }
+        bool rescan = SDL_GetTicks() - last_scan > 1000;
+        ImGui_ImplSDLRenderer3_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+        const ImGuiViewport *viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::Begin("firmware", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+        ImGui::SetWindowFontScale(1.3f);
+        ImGui::TextUnformatted("No firmware found");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::Spacing();
+        ImGui::TextWrapped("SHAM runs the organiser's real firmware, which isn't included. Put one or both of these files in the ROM folder. "
+                           "They are recognised by size and SHA-256, so any file name works.");
+        ImGui::Spacing();
+        ImGui::TextUnformatted("ROM folder:");
+        ImGui::SameLine();
+        ImGui::TextUnformatted(rom_directory.c_str());
+        if (ImGui::Button("Open ROM Folder")) {
+            make_directories(rom_directory);
+            SDL_OpenURL(("file://" + rom_directory).c_str());
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Copy Path")) SDL_SetClipboardText(rom_directory.c_str());
+        ImGui::SameLine();
+        if (ImGui::Button("Check Again")) rescan = true;
+        ImGui::Spacing();
+        if (ImGui::BeginTable("known", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+            ImGui::TableSetupColumn("Firmware");
+            ImGui::TableSetupColumn("Runs as");
+            ImGui::TableSetupColumn("Size");
+            ImGui::TableSetupColumn("SHA-256");
+            ImGui::TableHeadersRow();
+            for (const KnownFirmware &known : known_firmware()) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(known.title);
+                ImGui::TextDisabled("%s", known.source);
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(known.model);
+                ImGui::TableNextColumn();
+                ImGui::Text("%zu bytes", known.size);
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(grouped_hash(known.sha256).c_str());
+                ImGui::PushID(known.id);
+                if (ImGui::SmallButton("Copy")) SDL_SetClipboardText(known.sha256);
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+        ImGui::Spacing();
+        ImGui::TextDisabled("Checking the folder every second. Or start with --rom=FILE.");
+        ImGui::End();
+        ImGui::Render();
+        SDL_SetRenderDrawColor(renderer, 26, 28, 31, 255);
+        SDL_RenderClear(renderer);
+        ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+        if (!screenshot.empty() && frame == frames) {
+            save_screenshot(renderer, screenshot);
+            return false;
+        }
+        SDL_RenderPresent(renderer);
+        if (rescan) {
+            found = find_firmware(rom_directory);
+            last_scan = SDL_GetTicks();
+        }
+        SDL_Delay(16);
+    }
+    return true;
+}
+
 int main(int argc, char **argv) {
     Options options;
-    load_settings(absolute(data_argument(argc, argv)), options);
+    std::string data_given = data_argument(argc, argv);
+    options.config = data_given.empty() ? xdg_directory("XDG_CONFIG_HOME", ".config") : absolute(data_given);
+    load_settings(options.config, options);
     if (!parse_options(argc, argv, options)) return 1;
-    if (options.model != "OZ-750" && options.model != "ZQ-770") {
+    if (!options.model.empty() && options.model != "OZ-750" && options.model != "ZQ-770") {
         usage();
         return 1;
     }
-    device_set_model(options.model.c_str());
+    bool model_given = !options.model.empty();
 
-    options.rom = absolute(options.rom);
+    std::string data_home = data_given.empty() ? xdg_directory("XDG_DATA_HOME", ".local/share") : absolute(data_given);
+    std::string rom_directory = data_home + "/rom";
+    options.data = data_given.empty() ? data_home + "/state" : data_home;
+    make_directories(options.config);
+    make_directories(options.data);
+    make_directories(rom_directory);
+    std::vector<FirmwareFile> firmware_choices = find_firmware(rom_directory);
+    if (firmware_choices.empty() && data_given.empty()) firmware_choices = find_firmware(absolute("rom"));
+    const KnownFirmware *running_firmware = nullptr;
+    if (options.rom_given) {
+        options.rom = absolute(options.rom);
+        running_firmware = identify_firmware(options.rom);
+    }
+    auto choose_firmware = [&]() {
+        if (options.rom_given || firmware_choices.empty()) return;
+        const FirmwareFile *chosen = &firmware_choices[0];
+        for (const FirmwareFile &choice : firmware_choices) {
+            if (options.firmware == choice.known->id) chosen = &choice;
+        }
+        options.rom = chosen->path;
+        running_firmware = chosen->known;
+    };
+    choose_firmware();
+    auto apply_model = [&]() {
+        if (!model_given) options.model = running_firmware ? running_firmware->model : "OZ-750";
+        device_set_model(options.model.c_str());
+    };
+    apply_model();
+    auto machine_model = [](const std::string &name) { return name == "ZQ-770" ? MACHINE_MODEL_ZQ770 : MACHINE_MODEL_OZ750; };
+
     options.apps = absolute(options.apps);
-    options.data = absolute(options.data);
     options.screenshot = absolute(options.screenshot);
-    mkdir(options.data.c_str(), 0755);
+    if (options.rom.empty()) fprintf(stderr, "sham7x0: no firmware found in %s\n", rom_directory.c_str());
     setvbuf(stdout, nullptr, _IONBF, 0);
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
@@ -605,8 +752,22 @@ int main(int argc, char **argv) {
     srand((unsigned)SDL_GetTicks() ^ (unsigned)time(nullptr));
     if (options.dead_columns) lcd_set_dead_columns(true);
 
+    if (options.rom.empty()) {
+        if (!wait_for_firmware(window, renderer, rom_directory, firmware_choices, options.screenshot, options.frames)) {
+            ImGui_ImplSDLRenderer3_Shutdown();
+            ImGui_ImplSDL3_Shutdown();
+            ImGui::DestroyContext();
+            SDL_Quit();
+            return 0;
+        }
+        choose_firmware();
+        apply_model();
+        SDL_SetWindowTitle(window, ("SHAM " + options.model).c_str());
+    }
+
     bool persist = !options.fresh && (options.screenshot.empty() || getenv("POCKET_PERSIST"));
-    host_config_t config = { options.rom.c_str(), options.data.c_str(), persist };
+    std::string state_name = state_file_name(running_firmware, options.rom);
+    host_config_t config = { options.rom.c_str(), options.data.c_str(), persist, machine_model(options.model), state_name.c_str() };
     if (!runtime_init(&config)) return 1;
     for (auto &path : options.install) runtime_install_wzd(absolute(path).c_str());
     if (!options.serial.empty()) runtime_set_serial(options.serial == "pty" ? "pty" : absolute(options.serial).c_str());
@@ -617,6 +778,18 @@ int main(int argc, char **argv) {
 
     browser_set_directory(options.apps.c_str());
     menu_install();
+    std::vector<std::string> firmware_titles;
+    for (const FirmwareFile &choice : firmware_choices) firmware_titles.push_back(std::string(choice.known->title) + ", " + choice.known->model);
+    auto refresh_firmware_menu = [&]() {
+        std::vector<const char *> titles;
+        int current = -1;
+        for (size_t i = 0; i < firmware_choices.size(); i++) {
+            titles.push_back(firmware_titles[i].c_str());
+            if (firmware_choices[i].path == options.rom) current = (int)i;
+        }
+        menu_set_firmware(titles.data(), (int)titles.size(), current);
+    };
+    refresh_firmware_menu();
 
     bool running = true;
     DeviceState device;
@@ -683,6 +856,18 @@ int main(int argc, char **argv) {
                 response = MENU_RESPONSE_VALUES[item - MENU_RESPONSE_FIRST];
                 lcd_set_response(response);
             }
+            if (item >= MENU_FIRMWARE_FIRST && item < MENU_FIRMWARE_END && item - MENU_FIRMWARE_FIRST < (int)firmware_choices.size()) {
+                const FirmwareFile &chosen = firmware_choices[item - MENU_FIRMWARE_FIRST];
+                if (runtime_switch_firmware(chosen.path.c_str(), machine_model(chosen.known->model), state_file_name(chosen.known, chosen.path).c_str())) {
+                    options.rom = chosen.path;
+                    options.firmware = chosen.known->id;
+                    running_firmware = chosen.known;
+                    options.model = chosen.known->model;
+                    device_set_model(options.model.c_str());
+                    SDL_SetWindowTitle(window, ("SHAM " + options.model).c_str());
+                    refresh_firmware_menu();
+                }
+            }
             if (item >= MENU_SERIAL_DEVICE_FIRST && item < MENU_SERIAL_DEVICE_END) {
                 if (const char *path = menu_serial_device(item)) runtime_set_serial(path);
             }
@@ -739,14 +924,14 @@ int main(int argc, char **argv) {
             static bool have_saved = false;
             int window_w = 0, window_h = 0;
             SDL_GetWindowSize(window, &window_w, &window_h);
-            Settings current = { show_console, layout, lcd_get_dead_columns(), device.scratches, device.wear, want_touchscreen, fps, response,
+            Settings current = { running_firmware ? running_firmware->id : options.firmware, show_console, layout, lcd_get_dead_columns(), device.scratches, device.wear, want_touchscreen, fps, response,
                                  touch.active ? touch.windowed.w : window_w,
                                  touch.active ? touch.windowed.h : show_console ? window_h : restore_height };
             if (!have_saved) {
                 saved = current;
                 have_saved = true;
             } else if (!(current == saved)) {
-                save_settings(options.data, current);
+                save_settings(options.config, current);
                 saved = current;
             }
         }

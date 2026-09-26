@@ -1,8 +1,29 @@
 # SHAM-7X0
 
-Sharp Handheld ApproxiMation: a proof of concept emulator for the Sharp OZ-750 organiser, running the real firmware behind the Pocket front-end (bezel, keyboard, LCD simulation). The ZQ-770 runs the same 1.62 firmware, which identifies itself to PC software as an OZ-750. `--model=ZQ-770` prints that model on the case instead.
+Sharp Handheld ApproxiMation: a proof of concept emulator for the Sharp OZ-750 and ZQ-770 organisers, running the real firmware behind the Pocket front-end (bezel, keyboard, LCD simulation).
 
-The firmware is not included. Put `r162.da1` from the Sharp System Update Utility v1.62 in `rom/`.
+The firmware is not included. Put one or both of these in the ROM folder, `$XDG_DATA_HOME/sham7x0/rom` (default `~/.local/share/sham7x0/rom`). They're recognised by size and SHA-256, so any file name works; with none found the emulator shows this table and a button to open the folder.
+
+| Firmware | Size | SHA-256 | Emulated as |
+|---|---|---|---|
+| OS 1.62: `r162.da1` from the Sharp System Update Utility v1.62 | 589824 | `a66c0b0e602464d44e1fb5083fb0e2b6e8d28ae920016875abfc51222c9b8311` | OZ-750 |
+| OS 2.1: pages 000-047 of a ZQ-770's flash (wizard-dev `dumps/`) | 589824 | `e56c8391f94f579505d41c3d05d0b103801cb340648c4c79e9898b44ec19812a` | ZQ-770 |
+
+Pick between them in Emulation > Firmware. `--rom=FILE` runs any image, known or not. If the ROM folder is empty, `./rom` is tried too.
+
+Files:
+
+| Path | Contents |
+|---|---|
+| `$XDG_CONFIG_HOME/sham7x0/emu.ini` (`~/.config/sham7x0`) | window, view and emulation settings, and the firmware last picked |
+| `$XDG_DATA_HOME/sham7x0/rom/` (`~/.local/share/sham7x0`) | firmware images |
+| `$XDG_DATA_HOME/sham7x0/state/` | saved machines: `state-os1.62.bin`, `state-os2.1.bin`, or `state-<file name>.bin` for an unknown `--rom` |
+
+`--data=DIR` keeps all three in `DIR` (`DIR/emu.ini`, `DIR/rom/`, and the state files in `DIR`) instead.
+
+A saved machine holds the CPU registers, the hardware state (ports, windows, interrupts, RTC, UART, flash command state), all emulated SRAM, and the flash data area from page 048 up, about 3.9MB in all. The firmware pages 000-047 aren't saved; they come from the ROM file on each launch, so a save only fits the firmware it was made with.
+
+`--model=OZ-750|ZQ-770` overrides the hardware the firmware runs on; it also sets the model printed on the case. The ZQ-770 has one 128KB SRAM mirrored across pages 400-4FF, nothing at 500 (open bus), the UART mirrored at ports 48-4F, undecoded ports reading as open bus, and port 12 reading F8. OS 2.1 ignores the keyboard unless port 12 bit 4 is set.
 
 ## Build
 
@@ -22,16 +43,17 @@ A blank machine reports "memory not initialized". Choose Run > Initialize Memory
 
 Console commands: `reset`, `init`, `testmode`, `on`, `install PATH`, `save`, `pc`, `trace on`, `trace off`. Run > Factory Test Mode (or `testmode`) resets with ESC+D held, which opens the firmware's factory test menus. The lid up/down keys change page and digits pick a test. Cmd-R resets back out; like any reset, that goes through the contrast screen first. Some tests (RAM FILL, the FLASH ROM items, CLEAR ADDIN AREA) overwrite memory. Cmd-R resets, the bezel POWER key presses ON.
 
-The machine state (CPU, RAM, flash data area, clock) is saved to `data/state.bin` on exit and every minute, and restored on launch with the clock advanced by the time away. `--fresh` ignores it. Screenshot runs don't touch it.
+The machine state is saved to the firmware's state file on exit and every minute, and restored on launch with the clock advanced by the time away. `--fresh` ignores it. Screenshot runs don't touch it.
 
 Clicked keyboard keys go straight to the key matrix, so Shift, 2nd and CAPS behave as the firmware decides. A clicked left Shift stays down until the next key. Host typing and the bezel keys are translated to matrix presses.
 
 ```
 ./sham7x0 --exec=init --keys="{WAIT}...{ENTER}"
 ./headless rom/r162.da1 --seconds=10 --keys=0:99.0/1.5,2:6.6/0.3 --pbm=out.pbm
+./headless rom/os2.1-firmware.bin --model=ZQ-770 --seconds=10 --keys=0:99.0/1.5,4.13:6.6/0.3 --pbm=out.pbm
 ```
 
-Headless keys are `SECONDS:COLUMN.ROW/HOLD`. Column 99 is the ON key. `--model=ZQ-770` runs the headless machine as a ZQ-770 (default OZ-750), for example with OS 2.1: `./headless rom/os2.1-firmware.bin --model=ZQ-770 --seconds=10 --keys=0:99.0/1.5,4.13:6.6/0.3`.
+Headless keys are `SECONDS:COLUMN.ROW/HOLD`. Column 99 is the ON key. Headless defaults to `--model=OZ-750`.
 
 `--serial[=TARGET]` connects the UART. A character device such as `/dev/cu.usbmodem1101` is opened as a real serial port, and its baud rate follows the divisor the program sets (WizTerm defaults to 9600). Any other `TARGET` gets a pty symlinked there, and plain `--serial` gets an unlinked pty. Headless runs in real time with it, and `--serial-log=FILE` records the traffic. PC SYNC (2nd, MENU) and WizTerm work against it.
 

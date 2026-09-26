@@ -575,22 +575,68 @@ void runtime_service(void) {
     }
 }
 
-bool runtime_init(const host_config_t *config) {
-    rom_image = read_file(config->rom_path, &rom_size);
-    if (!rom_image) {
-        fprintf(stderr, "sham7x0: cannot read ROM %s\n", config->rom_path);
+static char data_path[1024];
+
+static bool start_machine(const char *rom_path, int model, const char *state_name) {
+    size_t size = 0;
+    uint8_t *image = read_file(rom_path, &size);
+    if (!image) {
+        fprintf(stderr, "sham7x0: cannot read ROM %s\n", rom_path);
         return false;
     }
+    machine_t *created = machine_create(image, size, (machine_model_t)model);
+    if (!created) {
+        free(image);
+        return false;
+    }
+    free(rom_image);
+    rom_image = image;
+    rom_size = size;
+    machine = created;
     load_keycode_table();
-    machine = machine_create(rom_image, rom_size, MACHINE_MODEL_OZ750);
-    if (!machine) return false;
     machine_set_log(machine, log_to_console);
-    persist = config->persist;
-    snprintf(state_path, sizeof state_path, "%s/state.bin", config->data_path);
+    snprintf(state_path, sizeof state_path, "%s/%s", data_path, state_name);
     load_state();
     sound_cursor = machine_cycles(machine);
-    boots = 1;
     last_step_ms = last_save_ms = host_ticks_ms();
+    return true;
+}
+
+bool runtime_init(const host_config_t *config) {
+    persist = config->persist;
+    snprintf(data_path, sizeof data_path, "%s", config->data_path);
+    if (!start_machine(config->rom_path, config->model, config->state_name)) return false;
+    boots = 1;
+    return true;
+}
+
+bool runtime_switch_firmware(const char *rom_path, int model, const char *state_name) {
+    for (int i = 0; i < link_count; i++) pclink_destroy(links[i]);
+    link_count = 0;
+    link_started = false;
+    char target[sizeof serial_target];
+    snprintf(target, sizeof target, "%s", serial_target);
+    if (serial) runtime_set_serial(NULL);
+    save_state();
+    machine_t *previous = machine;
+    uint8_t *previous_image = rom_image;
+    size_t previous_size = rom_size;
+    rom_image = NULL;
+    if (!start_machine(rom_path, model, state_name)) {
+        machine = previous;
+        rom_image = previous_image;
+        rom_size = previous_size;
+        console_notice("could not load that firmware");
+        if (target[0]) runtime_set_serial(target);
+        return false;
+    }
+    machine_destroy(previous);
+    free(previous_image);
+    boots++;
+    if (target[0]) runtime_set_serial(target);
+    char message[1200];
+    snprintf(message, sizeof message, "running %s as %s", rom_path, model == MACHINE_MODEL_ZQ770 ? "ZQ-770" : "OZ-750");
+    console_notice(message);
     return true;
 }
 

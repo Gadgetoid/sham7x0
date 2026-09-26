@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 bool        runtime_init(const host_config_t *config);
+bool        runtime_switch_firmware(const char *rom_path, int model, const char *state_name);
 void        runtime_step(void);
 void        runtime_service(void);
 void        runtime_request_reload(void);

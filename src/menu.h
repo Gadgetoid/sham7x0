@@ -32,7 +32,9 @@ enum {
     MENU_SERIAL_PTY,
     MENU_SERIAL_DEVICE_FIRST,
     MENU_SERIAL_DEVICE_END = MENU_SERIAL_DEVICE_FIRST + 32,
-    MENU_COUNT = MENU_SERIAL_DEVICE_END,
+    MENU_FIRMWARE_FIRST = MENU_SERIAL_DEVICE_END,
+    MENU_FIRMWARE_END = MENU_FIRMWARE_FIRST + 8,
+    MENU_COUNT = MENU_FIRMWARE_END,
 };
 
 static const int MENU_FPS_VALUES[] = { 0, 60, 30, 20, 15, 10 };
@@ -45,6 +47,7 @@ int  menu_poll(void);
 void menu_set_checked(int item, bool checked);
 void menu_set_serial(const char *target);
 const char *menu_serial_device(int item);
+void menu_set_firmware(const char *const *titles, int count, int current);
 
 #ifdef __cplusplus
 }

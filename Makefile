@@ -30,6 +30,7 @@ SRC_APP_CXX = \
 	src/main.cpp \
 	src/device.cpp \
 	src/browser.cpp \
+	src/firmware.cpp \
 	src/console.cpp
 
 SRC_IMGUI = $(addprefix $(IMGUI)/, \

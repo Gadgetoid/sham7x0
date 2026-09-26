@@ -13,6 +13,7 @@ static NSMenuItem *items[MENU_COUNT];
 static char serial_devices[MENU_SERIAL_DEVICE_END - MENU_SERIAL_DEVICE_FIRST][64];
 static int serial_device_count = 0;
 static char serial_current[512] = "";
+static NSMenu *firmware_menu = nil;
 
 @interface PocketMenuTarget : NSObject <NSMenuDelegate>
 @end
@@ -97,6 +98,14 @@ const char *menu_serial_device(int item) {
     return index >= 0 && index < serial_device_count ? serial_devices[index] : NULL;
 }
 
+void menu_set_firmware(const char *const *titles, int count, int current) {
+    if (!firmware_menu) return;
+    [firmware_menu removeAllItems];
+    for (int i = 0; i < count && i < MENU_FIRMWARE_END - MENU_FIRMWARE_FIRST; i++) {
+        add_serial_item(firmware_menu, MENU_FIRMWARE_FIRST + i, [NSString stringWithUTF8String:titles[i]], i == current);
+    }
+}
+
 static NSMenu *submenu(NSMenu *parent, NSString *title) {
     NSMenu *menu = [[NSMenu alloc] initWithTitle:title];
     NSMenuItem *holder = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
@@ -137,6 +146,7 @@ void menu_install(void) {
     NSMenu *emulation = add_menu(@"Emulation");
     add_item(emulation, MENU_BACKLIGHT, @"Backlight", @"b", NSEventModifierFlagCommand);
     add_item(emulation, MENU_SOUND, @"Sound", @"", 0);
+    firmware_menu = submenu(emulation, @"Firmware");
     NSMenu *serial = submenu(emulation, @"Serial Port");
     serial.delegate = target;
     rebuild_serial_menu(serial);
