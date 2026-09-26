@@ -575,9 +575,10 @@ const RecessPalette FINGER_SCOOP = { IM_COL32(66, 76, 84, 255), IM_COL32(214, 22
                                      IM_COL32(138, 150, 158, 255), IM_COL32(120, 132, 140, 255) };
 const ImU32 SLOPE_SHADE = IM_COL32(78, 86, 92, 255);
 const ImU32 SLOPE_LIT = IM_COL32(236, 240, 242, 255);
-const RecessStyle KEY_HOLE = { 0.6f, 1.4f, 1.0f };
-const RecessPalette KEY_HOLE_PALETTE = { IM_COL32(112, 120, 124, 255), IM_COL32(236, 240, 242, 255), IM_COL32(150, 158, 160, 255),
-                                         IM_COL32(160, 166, 166, 255), IM_COL32(152, 160, 160, 255) };
+const float KEY_HOLE_GAP = 2.2f;
+const float KEY_HOLE_EDGE_WIDTH = 1.1f;
+const ImU32 KEY_HOLE_DARK = IM_COL32(14, 16, 18, 255);
+const ImU32 KEY_HOLE_EDGE = IM_COL32(236, 240, 242, 230);
 const RecessStyle SCOOP_RECESS = { 1.0f, 7.0f, 0.0f };
 
 ImU32 mix(ImU32 a, ImU32 b, float t) {
@@ -1105,6 +1106,12 @@ struct KeyboardFrame {
 };
 
 Shape keyboard_key_shape(const KeyboardFrame &frame, const KeyboardKey &key) {
+    if (key.outline_count) {
+        Shape shape;
+        for (int i = 0; i < key.outline_count; i++) shape.push_back(frame.at(key.outline[i * 2], key.outline[i * 2 + 1]));
+        if (signed_area(shape) < 0) std::reverse(shape.begin(), shape.end());
+        return shape;
+    }
     if (key.shape == KB_SHAPE_CURSOR) {
         Shape local = cursor_outline(key.w, key.h);
         float angle = key.round_side * IM_PI * 0.5f;
@@ -1357,6 +1364,20 @@ void input_keyboard(const KeyboardFrame &frame, DeviceState &state, uint8_t *dow
     }
 }
 
+void draw_key_hole(ImDrawList *draw, const Shape &hole, float k) {
+    fill(draw, hole, KEY_HOLE_DARK, KEY_HOLE_DARK);
+    size_t count = hole.size();
+    for (size_t i = 0; i < count; i++) {
+        ImVec2 a = hole[i], b = hole[(i + 1) % count];
+        ImVec2 edge = b - a;
+        float length = sqrtf(edge.x * edge.x + edge.y * edge.y);
+        if (length <= 0) continue;
+        float facing = -edge.x / length;
+        if (facing <= 0) continue;
+        draw->AddLine(a, b, faded(KEY_HOLE_EDGE, powf(facing, 1.5f)), KEY_HOLE_EDGE_WIDTH * k);
+    }
+}
+
 void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const DeviceState &state, const uint8_t *down) {
     float k = frame.kbu;
     draw_keybed(draw, frame, state.wear);
@@ -1366,17 +1387,7 @@ void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const
         draw->AddPolyline(ring.data(), (int)ring.size(), faded(KB_RING, 0.95f), ImDrawFlags_Closed, 1.5f * k);
     }
 
-    for (const KeyboardKey &key : keyboard_keys) {
-        if (key.shape == KB_SHAPE_CURSOR) {
-            Shape seat = keyboard_key_shape(frame, key);
-            for (int ring = 4; ring >= 1; ring--) {
-                int alpha = (int)((state.wear ? 34 : 24) * (1.0f - ring * 0.18f));
-                fill(draw, translated(outset(seat, ring * 1.0f * k), ImVec2(0, 1.2f * k)), IM_COL32(20, 26, 32, alpha), IM_COL32(20, 26, 32, alpha));
-            }
-            continue;
-        }
-        draw_recess(draw, outset(keyboard_key_shape(frame, key), 2.0f * k), KEY_HOLE, k, Mask(), KEY_HOLE_PALETTE);
-    }
+    for (const KeyboardKey &key : keyboard_keys) draw_key_hole(draw, outset(keyboard_key_shape(frame, key), KEY_HOLE_GAP * k), k);
     for (const KeyboardKey &key : keyboard_keys) finger_grime(draw, keyboard_key_shape(frame, key), key.wear, k);
 
     for (const KeyboardKey &key : keyboard_keys) {

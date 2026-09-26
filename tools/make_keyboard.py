@@ -1,5 +1,9 @@
 import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import svg_keyboard
 
 DPAD_KEY = 82.0
 DPAD_UP_DY = -99.30
@@ -85,6 +89,59 @@ def respace_cursor(keys, layout):
     well["slope"] = (DPAD_WELL_R - DPAD_FLOOR_R) * scale
 
 
+def bounds(points):
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def normalised(centres):
+    left = min(c[0] for c in centres)
+    top = min(c[1] for c in centres)
+    right = max(c[0] for c in centres)
+    bottom = max(c[1] for c in centres)
+    return [((c[0] - left) / (right - left), (c[1] - top) / (bottom - top)) for c in centres]
+
+
+def apply_svg(keys, layout, path):
+    shapes, circles, label = svg_keyboard.load(path)
+    if len(shapes) != len(keys):
+        raise SystemExit("{}: {} key shapes for {} keys".format(path, len(shapes), len(keys)))
+    left, top, right, _ = bounds([(k["x"] - k["w"] / 2, k["y"] - k["h"] / 2) for k in keys] +
+                                 [(k["x"] + k["w"] / 2, k["y"] + k["h"] / 2) for k in keys])
+    old_bottom = max(k["y"] + k["h"] / 2 for k in keys)
+    svg_left, svg_top, svg_right, _ = bounds([p for shape in shapes for p in shape])
+    scale = (right - left) / (svg_right - svg_left)
+
+    def mapped(point):
+        return left + (point[0] - svg_left) * scale, top + (point[1] - svg_top) * scale
+
+    shape_centres = normalised([svg_keyboard.centre(shape) for shape in shapes])
+    key_centres = normalised([(k["x"], k["y"]) for k in keys])
+    pairs = sorted((abs(a[0] - b[0]) + abs(a[1] - b[1]), si, ki)
+                   for si, a in enumerate(shape_centres) for ki, b in enumerate(key_centres))
+    used_shapes, used_keys = set(), set()
+    for _, si, ki in pairs:
+        if si in used_shapes or ki in used_keys:
+            continue
+        used_shapes.add(si)
+        used_keys.add(ki)
+        outline = [mapped(p) for p in shapes[si]]
+        x0, y0, x1, y1 = bounds(outline)
+        key = keys[ki]
+        key.update(x=(x0 + x1) / 2, y=(y0 + y1) / 2, w=x1 - x0, h=y1 - y0, outline=outline)
+    outer, inner = sorted(circles, key=lambda c: -c[2])
+    well = layout["recesses"][0]
+    well["x"], well["y"] = mapped((outer[0], outer[1]))
+    well["r"] = (outer[2] + outer[3]) / 2 * scale
+    well["slope"] = ((outer[2] + outer[3]) - (inner[2] + inner[3])) / 2 * scale
+    new_bottom = max(k["y"] + k["h"] / 2 for k in keys)
+    layout["keyboard"]["height"] += new_bottom - old_bottom
+    menu = next(k for k in keys if k["id"] == "menu")
+    label_bottom = mapped((label[0], label[1] + label[3]))[1]
+    layout["label_clearance"] = menu["y"] - menu["h"] / 2 - label_bottom
+
+
 def key_codes(key):
     code = key["code"]
     legend = key["legend"].get("text") or ""
@@ -126,7 +183,10 @@ def key_wear(key):
 def main():
     layout = json.load(open(sys.argv[1]))
     keys = layout["keys"]
-    respace_cursor(keys, layout)
+    if len(sys.argv) > 3:
+        apply_svg(keys, layout, sys.argv[3])
+    else:
+        respace_cursor(keys, layout)
     keyboard = layout["keyboard"]
     colours = layout["colours"]
     well = layout["recesses"][0]
@@ -171,6 +231,8 @@ def main():
         "    float wear;",
         "    int secondary_count;",
         "    KeyboardSecondary secondary[2];",
+        "    const float *outline;",
+        "    int outline_count;",
         "};",
         "",
         "static const float KB_WIDTH = {:.2f}f;".format(keyboard["width"]),
@@ -203,8 +265,12 @@ def main():
         "static const ImU32 KB_BADGE_TEXT = {};".format(colour(colours["purple-badge"]["text"])),
         "static const uint32_t KB_KEY_CAPS = 0x{:x};".format(KEY_CAPS),
         "",
-        "static const KeyboardKey keyboard_keys[] = {",
     ]
+    for key in keys:
+        if "outline" in key:
+            lines.append("static const float KB_OUTLINE_{}[] = {{ {} }};".format(
+                key["id"].upper(), ", ".join("{:.2f}f, {:.2f}f".format(x, y) for x, y in key["outline"])))
+    lines += ["", "static const KeyboardKey keyboard_keys[] = {"]
     for key in keys:
         normal, shift_code, second_code, action, is_letter, legend = key_codes(key)
         legend_spec = key["legend"]
@@ -215,13 +281,14 @@ def main():
                 ICONS[item.get("icon", "")]))
         while len(secondaries) < 2:
             secondaries.append("{ nullptr, 0, 0.0f, 0.0f, 0 }")
-        lines.append("    {{ {}, {:.2f}f, {:.2f}f, {:.2f}f, {:.2f}f, {}, {}, {}, {}, {}, {:.2f}f, {:.2f}f, {:.2f}f, 0x{:x}, 0x{:x}, 0x{:x}, {}, {}, {}, {}, {:.2f}f, {}, {{ {}, {} }} }},".format(
+        lines.append("    {{ {}, {:.2f}f, {:.2f}f, {:.2f}f, {:.2f}f, {}, {}, {}, {}, {}, {:.2f}f, {:.2f}f, {:.2f}f, 0x{:x}, 0x{:x}, 0x{:x}, {}, {}, {}, {}, {:.2f}f, {}, {{ {}, {} }}, {}, {} }},".format(
             c_string(key["id"]), key["x"], key["y"], key["w"], key["h"], SHAPES[key["shape"]],
             SIDES.get(key.get("round_side", key.get("square_side", "right")), 0), COLOURS[key["colour"]], c_string(legend_spec.get("text")),
             ICONS[legend_spec.get("icon", "")], legend_spec["size"], legend_spec["dy"], legend_spec.get("stretch", 1.0),
             normal, shift_code, second_code, action, "true" if is_letter else "false",
             "true" if "outline_ring" in key else "false", "true" if "homing_bar" in key else "false",
-            key_wear(key), len(key["secondary"][:2]), secondaries[0], secondaries[1]))
+            key_wear(key), len(key["secondary"][:2]), secondaries[0], secondaries[1],
+            "KB_OUTLINE_" + key["id"].upper() if "outline" in key else "nullptr", len(key.get("outline", []))))
     lines.append("};")
     open(sys.argv[2], "w").write("\n".join(lines) + "\n")
     print("{}: {} keys".format(sys.argv[2], len(keys)))

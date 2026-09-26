@@ -72,7 +72,7 @@ test: headless
 	python3 tools/test.py
 
 keyboard:
-	python3 tools/make_keyboard.py tools/keyboard_layout.json src/keyboard_layout.h
+	python3 tools/make_keyboard.py tools/keyboard_layout.json src/keyboard_layout.h tools/keyboard_layout.svg
 
 clean:
 	rm -rf $(BUILD) $(PROG) headless
