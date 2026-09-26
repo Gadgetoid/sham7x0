@@ -104,7 +104,7 @@ def normalised(centres):
 
 
 def apply_svg(keys, layout, path):
-    shapes, circles, label = svg_keyboard.load(path)
+    shapes, circles, label, icons, locators = svg_keyboard.load(path)
     if len(shapes) != len(keys):
         raise SystemExit("{}: {} key shapes for {} keys".format(path, len(shapes), len(keys)))
     left, top, right, _ = bounds([(k["x"] - k["w"] / 2, k["y"] - k["h"] / 2) for k in keys] +
@@ -133,6 +133,12 @@ def apply_svg(keys, layout, path):
         key["legend"]["size"] *= growth
         key["legend"]["dy"] *= growth
         key.update(x=(x0 + x1) / 2, y=(y0 + y1) / 2, w=x1 - x0, h=y1 - y0, outline=outline)
+        for name, polygons in icons:
+            if svg_keyboard.contains(shapes[si], svg_keyboard.centre([p for polygon in polygons for p in polygon])):
+                key["svg_icon"] = [[mapped(p) for p in polygon] for polygon in polygons]
+        for locator in locators:
+            if svg_keyboard.contains(shapes[si], svg_keyboard.centre(locator)):
+                key["svg_locator"] = [mapped(p) for p in locator]
     outer, inner = sorted(circles, key=lambda c: -c[2])
     well = layout["recesses"][0]
     well["x"], well["y"] = mapped((outer[0], outer[1]))
@@ -236,6 +242,11 @@ def main():
         "    KeyboardSecondary secondary[2];",
         "    const float *outline;",
         "    int outline_count;",
+        "    const float *icon_points;",
+        "    const int *icon_counts;",
+        "    int icon_regions;",
+        "    const float *locator;",
+        "    int locator_count;",
         "};",
         "",
         "static const float KB_WIDTH = {:.2f}f;".format(keyboard["width"]),
@@ -269,10 +280,18 @@ def main():
         "static const uint32_t KB_KEY_CAPS = 0x{:x};".format(KEY_CAPS),
         "",
     ]
+    def points(values):
+        return ", ".join("{:.2f}f, {:.2f}f".format(x, y) for x, y in values)
+
     for key in keys:
+        name = key["id"].upper()
         if "outline" in key:
-            lines.append("static const float KB_OUTLINE_{}[] = {{ {} }};".format(
-                key["id"].upper(), ", ".join("{:.2f}f, {:.2f}f".format(x, y) for x, y in key["outline"])))
+            lines.append("static const float KB_OUTLINE_{}[] = {{ {} }};".format(name, points(key["outline"])))
+        if "svg_icon" in key:
+            lines.append("static const float KB_ICON_{}[] = {{ {} }};".format(name, points(p for polygon in key["svg_icon"] for p in polygon)))
+            lines.append("static const int KB_ICON_{}_COUNTS[] = {{ {} }};".format(name, ", ".join(str(len(polygon)) for polygon in key["svg_icon"])))
+        if "svg_locator" in key:
+            lines.append("static const float KB_LOCATOR_{}[] = {{ {} }};".format(name, points(key["svg_locator"])))
     lines += ["", "static const KeyboardKey keyboard_keys[] = {"]
     for key in keys:
         normal, shift_code, second_code, action, is_letter, legend = key_codes(key)
@@ -284,14 +303,17 @@ def main():
                 ICONS[item.get("icon", "")]))
         while len(secondaries) < 2:
             secondaries.append("{ nullptr, 0, 0.0f, 0.0f, 0 }")
-        lines.append("    {{ {}, {:.2f}f, {:.2f}f, {:.2f}f, {:.2f}f, {}, {}, {}, {}, {}, {:.2f}f, {:.2f}f, {:.2f}f, 0x{:x}, 0x{:x}, 0x{:x}, {}, {}, {}, {}, {:.2f}f, {}, {{ {}, {} }}, {}, {} }},".format(
+        lines.append("    {{ {}, {:.2f}f, {:.2f}f, {:.2f}f, {:.2f}f, {}, {}, {}, {}, {}, {:.2f}f, {:.2f}f, {:.2f}f, 0x{:x}, 0x{:x}, 0x{:x}, {}, {}, {}, {}, {:.2f}f, {}, {{ {}, {} }}, {}, {}, {}, {}, {}, {}, {} }},".format(
             c_string(key["id"]), key["x"], key["y"], key["w"], key["h"], SHAPES[key["shape"]],
             SIDES.get(key.get("round_side", key.get("square_side", "right")), 0), COLOURS[key["colour"]], c_string(legend_spec.get("text")),
             ICONS[legend_spec.get("icon", "")], legend_spec["size"], legend_spec["dy"], legend_spec.get("stretch", 1.0),
             normal, shift_code, second_code, action, "true" if is_letter else "false",
             "true" if "outline_ring" in key else "false", "true" if "homing_bar" in key else "false",
             key_wear(key), len(key["secondary"][:2]), secondaries[0], secondaries[1],
-            "KB_OUTLINE_" + key["id"].upper() if "outline" in key else "nullptr", len(key.get("outline", []))))
+            "KB_OUTLINE_" + key["id"].upper() if "outline" in key else "nullptr", len(key.get("outline", [])),
+            "KB_ICON_" + key["id"].upper() if "svg_icon" in key else "nullptr",
+            "KB_ICON_" + key["id"].upper() + "_COUNTS" if "svg_icon" in key else "nullptr", len(key.get("svg_icon", [])),
+            "KB_LOCATOR_" + key["id"].upper() if "svg_locator" in key else "nullptr", len(key.get("svg_locator", []))))
     lines.append("};")
     open(sys.argv[2], "w").write("\n".join(lines) + "\n")
     print("{}: {} keys".format(sys.argv[2], len(keys)))

@@ -577,6 +577,7 @@ const ImU32 SLOPE_SHADE = IM_COL32(78, 86, 92, 255);
 const ImU32 SLOPE_LIT = IM_COL32(236, 240, 242, 255);
 const float KEY_HOLE_GAP = 2.2f;
 const float HOMING_DROP = 0.4f;
+const float KEY_REFERENCE_H = 36.6f;
 const float HOMING_HALF_W = 8.4f;
 const float HOMING_HALF_H = 2.25f;
 const float KEY_HOLE_EDGE_WIDTH = 1.1f;
@@ -1367,6 +1368,12 @@ void input_keyboard(const KeyboardFrame &frame, DeviceState &state, uint8_t *dow
     }
 }
 
+Shape traced_points(const KeyboardFrame &frame, const float *points, int count, ImVec2 offset) {
+    Shape shape;
+    for (int i = 0; i < count; i++) shape.push_back(frame.at(points[i * 2], points[i * 2 + 1]) + offset);
+    return shape;
+}
+
 void draw_key_hole(ImDrawList *draw, const Shape &hole, float k) {
     fill(draw, hole, KEY_HOLE_DARK, KEY_HOLE_DARK);
     size_t count = hole.size();
@@ -1433,7 +1440,8 @@ void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const
         ImU32 face = mix(style.top, style.bottom, 0.5f);
         if (key.homing) {
             float bar_y = key.h * HOMING_DROP;
-            Shape bar = pill(centre + ImVec2(-HOMING_HALF_W, bar_y - HOMING_HALF_H) * k, centre + ImVec2(HOMING_HALF_W, bar_y + HOMING_HALF_H) * k);
+            Shape bar = key.locator_count ? traced_points(frame, key.locator, key.locator_count, dip)
+                                          : pill(centre + ImVec2(-HOMING_HALF_W, bar_y - HOMING_HALF_H) * k, centre + ImVec2(HOMING_HALF_W, bar_y + HOMING_HALF_H) * k);
             ImU32 ridge_side = mix(style.bottom, IM_COL32(0, 0, 0, 255), 0.18f);
             for (int step = 3; step >= 1; step--) fill(draw, translated(bar, ImVec2(0, step * 0.35f * k)), ridge_side, ridge_side);
             fill(draw, bar, lighten(style.top, 6), mix(style.top, style.bottom, 0.45f));
@@ -1441,7 +1449,16 @@ void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const
         ImU32 legend_colour = faded(KB_KEY_LEGEND[key.colour], KB_LEGEND_ALPHA);
         ImVec2 legend_centre = centre + ImVec2(0, key.legend_dy * k);
         ImRect legend_box(legend_centre - ImVec2(12, 9) * k, legend_centre + ImVec2(12, 9) * k);
-        if (key.icon == KB_ICON_NONE && key.legend) {
+        if (key.icon_regions) {
+            if (key.legend) centred_legend(draw, keyboard_font(false), key.legend_size * k, key.legend, centre + ImVec2(1.0f, -6.5f) * k * key.h / KEY_REFERENCE_H,
+                                           legend_colour, KB_LEGEND_STRETCH);
+            const float *point = key.icon_points;
+            for (int region = 0; region < key.icon_regions; region++) {
+                Shape polygon = traced_points(frame, point, key.icon_counts[region], dip);
+                draw->AddConcavePolyFilled(polygon.data(), (int)polygon.size(), legend_colour);
+                point += key.icon_counts[region] * 2;
+            }
+        } else if (key.icon == KB_ICON_NONE && key.legend) {
             legend_box = centred_legend(draw, keyboard_font(false), key.legend_size * k, key.legend, legend_centre, legend_colour,
                                         KB_LEGEND_STRETCH * key.stretch);
         } else {
