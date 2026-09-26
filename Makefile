@@ -1,4 +1,4 @@
-PROG      = zq77x-emu
+PROG      = sham7x0
 
 .DEFAULT_GOAL := $(PROG)
 IMGUI     = lib/imgui

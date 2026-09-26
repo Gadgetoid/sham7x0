@@ -53,6 +53,7 @@ extern "C" uint32_t host_ticks_ms(void) {
 
 struct Options {
     std::string rom = "rom/r162.da1";
+    std::string model = "OZ-750";
     std::string data = "data";
     std::string apps = "apps";
     std::vector<std::string> install;
@@ -162,11 +163,12 @@ static int menu_item_named(const std::string &name) {
 
 static void usage() {
     printf(
-        "usage: zq77x-emu [options]\n"
+        "usage: sham7x0 [options]\n"
         "  --rom=FILE          firmware image (default rom/r162.da1)\n"
         "  --data=DIR          settings and saved machine state (default data)\n"
         "  --fresh             ignore and do not write the saved machine state\n"
         "  --apps=DIR          App Browser catalogue and where Install .wzd starts looking (default apps)\n"
+        "  --model=NAME        model printed on the case: OZ-750 (default) or ZQ-770\n"
         "  --install=FILE      install a .wzd program after boot, repeatable\n"
         "  --serial[=TARGET]   connect the UART: a serial device such as /dev/cu.usbmodem1101, or a pty linked at TARGET\n"
         "  --size=WxH          window size (default 1400x900)\n"
@@ -206,6 +208,7 @@ static bool parse_options(int argc, char **argv, Options &options) {
         if (const char *v = value("--rom=")) options.rom = v;
         else if (const char *v = value("--data=")) options.data = v;
         else if (const char *v = value("--apps=")) options.apps = v;
+        else if (const char *v = value("--model=")) options.model = v;
         else if (const char *v = value("--install=")) options.install.push_back(v);
         else if (arg == "--serial") options.serial = "pty";
         else if (const char *v = value("--serial=")) options.serial = v;
@@ -546,6 +549,11 @@ int main(int argc, char **argv) {
     Options options;
     load_settings(absolute(data_argument(argc, argv)), options);
     if (!parse_options(argc, argv, options)) return 1;
+    if (options.model != "OZ-750" && options.model != "ZQ-770") {
+        usage();
+        return 1;
+    }
+    device_set_model(options.model.c_str());
 
     options.rom = absolute(options.rom);
     options.apps = absolute(options.apps);
@@ -560,7 +568,7 @@ int main(int argc, char **argv) {
     }
     start_ticks = SDL_GetTicks();
 
-    SDL_Window *window = SDL_CreateWindow("ZQ-77x", options.width, options.height,
+    SDL_Window *window = SDL_CreateWindow(("SHAM " + options.model).c_str(), options.width, options.height,
                                           SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
                                           (options.screenshot.empty() ? 0 : SDL_WINDOW_HIDDEN));
     SDL_Renderer *renderer = window ? SDL_CreateRenderer(window, nullptr) : nullptr;

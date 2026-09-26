@@ -565,7 +565,7 @@ void runtime_service(void) {
 bool runtime_init(const host_config_t *config) {
     rom_image = read_file(config->rom_path, &rom_size);
     if (!rom_image) {
-        fprintf(stderr, "zq77x-emu: cannot read ROM %s\n", config->rom_path);
+        fprintf(stderr, "sham7x0: cannot read ROM %s\n", config->rom_path);
         return false;
     }
     load_keycode_table();

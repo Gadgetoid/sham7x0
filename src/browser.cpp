@@ -172,7 +172,7 @@ void load() {
         JsonReader reader = { text.data(), text.data() + text.size() };
         std::vector<Record> records;
         if (!reader.read_records(records)) {
-            fprintf(stderr, "zq77x-emu: cannot parse %s/%s/index.json\n", apps_directory.c_str(), kind.directory);
+            fprintf(stderr, "sham7x0: cannot parse %s/%s/index.json\n", apps_directory.c_str(), kind.directory);
             continue;
         }
         for (Record &record : records) {

@@ -91,6 +91,7 @@ int grime_w = 0, grime_h = 0;
 bool grime_wear = false;
 bool wear_labels = false;
 ImFont *label_font = nullptr;
+std::string model_name = "OZ-750";
 ImFont *kb_legend_font = nullptr;
 ImFont *kb_label_font = nullptr;
 ImFont *icon_font = nullptr;
@@ -1447,11 +1448,12 @@ struct BakeKey {
     float scale;
     bool show_keys, has_keyboard, wear, focused;
     std::vector<uint8_t> down;
+    std::string model;
 
     bool operator==(const BakeKey &other) const {
         return origin.x == other.origin.x && origin.y == other.origin.y && size.x == other.size.x && size.y == other.size.y &&
                scale == other.scale && show_keys == other.show_keys && has_keyboard == other.has_keyboard && wear == other.wear &&
-               focused == other.focused && down == other.down;
+               focused == other.focused && down == other.down && model == other.model;
     }
 };
 
@@ -1505,13 +1507,13 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
         ImVec2 at = image_min + ImVec2(-4 * u, -50 * u);
         erase_colour = faded(BEZEL, 0.9f);
         rub_mode = false;
-        draw->AddText(text_font(), brand, at, PRINT, "SPORK");
-        wear_patch(draw, at, at + text_size(text_font(), brand, "SPORK"), 1);
-        draw->AddText(ImGui::GetFont(), 17.0f * u, at + ImVec2(text_size(text_font(), brand, "SPORK").x + 18 * u, 5 * u), PRINT, "ZQ-770");
+        draw->AddText(text_font(), brand, at, PRINT, "SHAM");
+        wear_patch(draw, at, at + text_size(text_font(), brand, "SHAM"), 1);
+        draw->AddText(ImGui::GetFont(), 17.0f * u, at + ImVec2(text_size(text_font(), brand, "SHAM").x + 18 * u, 5 * u), PRINT, model_name.c_str());
         paint_lid_keys(draw, Frame{ image_min, image_max, u }, device_min, device_max, down);
         if (layout.has_keyboard) paint_keyboard(draw, keyboard_frame(layout), u, state, down + LID_KEY_COUNT);
     } else {
-        draw->AddText(device_min + ImVec2(PLAIN_BEZEL, 8), IM_COL32(60, 66, 72, 255), "SPORK  ZQ-770");
+        draw->AddText(device_min + ImVec2(PLAIN_BEZEL, 8), IM_COL32(60, 66, 72, 255), ("SHAM  " + model_name).c_str());
     }
 
 }
@@ -1593,7 +1595,7 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
         if (has_keyboard) input_keyboard(keyboard_frame(layout), state, down.data() + LID_KEY_COUNT);
     }
 
-    BakeKey key = { origin, ImVec2(avail_w, height), framebuffer_scale, state.show_keys, has_keyboard, state.wear, state.focused, down };
+    BakeKey key = { origin, ImVec2(avail_w, height), framebuffer_scale, state.show_keys, has_keyboard, state.wear, state.focused, down, model_name };
     ImDrawList *draw = ImGui::GetWindowDrawList();
     if (bake_texture && !bake_pending && key == baked) {
         draw->AddImage((ImTextureID)(intptr_t)bake_texture, bake_min, bake_min + ImVec2((float)bake_texture->w, (float)bake_texture->h) / bake_scale);
@@ -1659,6 +1661,10 @@ void device_flush_bake(SDL_Renderer *renderer) {
     ImGui_ImplSDLRenderer3_RenderDrawData(&data, renderer);
     SDL_SetRenderTarget(renderer, previous);
     baked = pending;
+}
+
+void device_set_model(const char *model) {
+    model_name = model;
 }
 
 void device_set_label_font(ImFont *font) {

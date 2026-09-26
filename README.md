@@ -1,6 +1,6 @@
-# zq77x-emu
+# SHAM-7X0
 
-Proof of concept emulator for the Sharp OZ/ZQ-7xx organisers, running the real firmware behind the Pocket front-end (bezel, keyboard, LCD simulation).
+Sharp Handheld ApproxiMation: a proof of concept emulator for the Sharp OZ-750 organiser, running the real firmware behind the Pocket front-end (bezel, keyboard, LCD simulation). The ZQ-770 runs the same 1.62 firmware, which identifies itself to PC software as an OZ-750. `--model=ZQ-770` prints that model on the case instead.
 
 The firmware is not included. Put `r162.da1` from the Sharp System Update Utility v1.62 in `rom/`.
 
@@ -27,7 +27,7 @@ The machine state (CPU, RAM, flash data area, clock) is saved to `data/state.bin
 Clicked keyboard keys go straight to the key matrix, so Shift, 2nd and CAPS behave as the firmware decides. A clicked left Shift stays down until the next key. Host typing and the bezel keys are translated to matrix presses.
 
 ```
-./zq77x-emu --exec=init --keys="{WAIT}...{ENTER}"
+./sham7x0 --exec=init --keys="{WAIT}...{ENTER}"
 ./headless rom/r162.da1 --seconds=10 --keys=0:99.0/1.5,2:6.6/0.3 --pbm=out.pbm
 ```
 
