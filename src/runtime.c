@@ -430,7 +430,7 @@ static void drain_sound(void) {
 static void present_lcd(void) {
     machine_lcd_t lcd = machine_lcd(machine);
     if (lcd.on != shown_lcd.on) lcd_set_power(lcd.on);
-    if (lcd.backlight != shown_lcd.backlight) lcd_set_backlight(lcd.backlight);
+    if (lcd.backlight != lcd_get_backlight()) lcd_set_backlight(lcd.backlight);
     if (lcd.contrast != shown_lcd.contrast && lcd.on) lcd_set_contrast(5 + (lcd.contrast - DEFAULT_CONTRAST) / 3);
     shown_lcd = lcd;
 }

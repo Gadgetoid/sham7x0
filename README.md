@@ -80,7 +80,7 @@ From the firmware and [ozdev](https://github.com/arpruss/ozdev).
 | A000-BFFF | 8KB page from ports 3/4, physical page = value |
 | C000-FFFF | fixed RAM pages 402-403 |
 | Pages 000-17F | flash, firmware in 000-047, data from 048 |
-| Page 300 | LCD control word: bit 7 on, bit 6 blank, bits 0-5 contrast, bit 8 backlight |
+| Page 300 | LCD control word: bit 7 on, bit 6 blank, bits 0-5 contrast, bit 8 backlight (the firmware clears it about a minute after the LIGHT key) |
 | Pages 400+ | RAM, display at 400 or 404 (port 22/23) |
 | Ports 5/6/7 | interrupt status / acknowledge / mask. Bit 0 keyboard, 2 UART, 4 1Hz RTC, 5 64Hz tick, 7 ON key |
 | Port 8 | sleep before HALT |

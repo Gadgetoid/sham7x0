@@ -845,7 +845,7 @@ void input_lid_keys(const Frame &frame, DeviceState &state, uint8_t *down) {
         down[LID_SIDE + index] = pressed;
     }
     bool pressed;
-    if (hit("key-light", lid.light, pressed)) lcd_set_backlight(!lcd_get_backlight());
+    if (hit("key-light", lid.light, pressed) && live) keys_push(HOST_KEY_F1 + 5, 0);
     down[LID_LIGHT] = pressed;
     if (hit("key-menu", lid.menu, pressed) && live) keys_push(HOST_KEY_TAB, HOST_MOD_LID);
     down[LID_MENU] = pressed;

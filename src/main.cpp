@@ -72,7 +72,6 @@ struct Options {
     int layout = -1;
     int fps = 0;
     float response = 1.0f;
-    bool backlight = true;
     bool scratches = true;
     bool wear = false;
     bool touchscreen = false;
@@ -83,7 +82,6 @@ struct Options {
 struct Settings {
     bool show_console;
     int layout;
-    bool backlight;
     bool dead_columns;
     bool scratches;
     bool wear;
@@ -94,7 +92,7 @@ struct Settings {
     int height;
 
     bool operator==(const Settings &other) const {
-        return show_console == other.show_console && layout == other.layout && backlight == other.backlight &&
+        return show_console == other.show_console && layout == other.layout &&
                dead_columns == other.dead_columns && scratches == other.scratches && wear == other.wear && touchscreen == other.touchscreen && fps == other.fps && response == other.response &&
                width == other.width && height == other.height;
     }
@@ -115,7 +113,6 @@ static void load_settings(const std::string &data, Options &options) {
         else if (name == "show_keys") options.show_keys = atoi(value) != 0;
         else if (name == "show_keyboard") options.show_keyboard = atoi(value) != 0;
         else if (name == "layout") options.layout = atoi(value);
-        else if (name == "backlight") options.backlight = atoi(value) != 0;
         else if (name == "dead_columns") options.dead_columns = atoi(value) != 0;
         else if (name == "scratches") options.scratches = atoi(value) != 0;
         else if (name == "wear") options.wear = atoi(value) != 0;
@@ -133,8 +130,8 @@ static void save_settings(const std::string &data, const Settings &settings) {
     std::string temporary = path + ".tmp";
     FILE *file = fopen(temporary.c_str(), "w");
     if (!file) return;
-    fprintf(file, "show_console=%d\nlayout=%d\nbacklight=%d\ndead_columns=%d\nscratches=%d\nwear=%d\ntouchscreen=%d\nfps=%d\nresponse=%g\nwidth=%d\nheight=%d\n",
-            settings.show_console, settings.layout, settings.backlight, settings.dead_columns, settings.scratches, settings.wear, settings.touchscreen, settings.fps,
+    fprintf(file, "show_console=%d\nlayout=%d\ndead_columns=%d\nscratches=%d\nwear=%d\ntouchscreen=%d\nfps=%d\nresponse=%g\nwidth=%d\nheight=%d\n",
+            settings.show_console, settings.layout, settings.dead_columns, settings.scratches, settings.wear, settings.touchscreen, settings.fps,
             settings.response, settings.width, settings.height);
     fclose(file);
     rename(temporary.c_str(), path.c_str());
@@ -607,7 +604,6 @@ int main(int argc, char **argv) {
 
     srand((unsigned)SDL_GetTicks() ^ (unsigned)time(nullptr));
     if (options.dead_columns) lcd_set_dead_columns(true);
-    lcd_set_backlight(options.backlight);
 
     bool persist = !options.fresh && (options.screenshot.empty() || getenv("POCKET_PERSIST"));
     host_config_t config = { options.rom.c_str(), options.data.c_str(), persist };
@@ -720,7 +716,7 @@ int main(int argc, char **argv) {
                     show_console = true;
                     console_focus();
                     break;
-                case MENU_BACKLIGHT:    lcd_set_backlight(!lcd_get_backlight()); break;
+                case MENU_BACKLIGHT:    keys_push(HOST_KEY_F1 + 5, 0); break;
                 case MENU_DEAD_COLUMNS: lcd_set_dead_columns(!lcd_get_dead_columns()); break;
                 case MENU_SOUND:        beeper_set_sound(!beeper_sound()); break;
                 case MENU_SCRATCHES:    device.scratches = !device.scratches; break;
@@ -743,7 +739,7 @@ int main(int argc, char **argv) {
             static bool have_saved = false;
             int window_w = 0, window_h = 0;
             SDL_GetWindowSize(window, &window_w, &window_h);
-            Settings current = { show_console, layout, lcd_get_backlight(), lcd_get_dead_columns(), device.scratches, device.wear, want_touchscreen, fps, response,
+            Settings current = { show_console, layout, lcd_get_dead_columns(), device.scratches, device.wear, want_touchscreen, fps, response,
                                  touch.active ? touch.windowed.w : window_w,
                                  touch.active ? touch.windowed.h : show_console ? window_h : restore_height };
             if (!have_saved) {
