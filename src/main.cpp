@@ -809,7 +809,7 @@ int main(int argc, char **argv) {
         const char *transfer_description = nullptr;
         int transfer_waiting = 0;
         bool busy = had_event || frame < STARTUP_FRAMES || !options.screenshot.empty() || script.next < script.steps.size() ||
-                    lcd_needs_compose() || console_take_changed() ||
+                    lcd_needs_compose() || console_take_changed() || SDL_GetMouseState(nullptr, nullptr) != 0 ||
                     runtime_transfer_progress(&transfer_fraction, &transfer_description, &transfer_waiting);
         if (busy) redraw_until_ms = now_ms + REDRAW_TAIL_MS;
         idle = now_ms >= redraw_until_ms;
