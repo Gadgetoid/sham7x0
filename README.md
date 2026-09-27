@@ -29,15 +29,19 @@ A saved machine holds the CPU registers, the hardware state (ports, windows, int
 
 ## Build
 
-macOS, SDL3 and the imgui submodule.
+SDL3 and the imgui submodule, on macOS, Linux or Windows (MSYS2 UCRT64).
 
 ```
 git submodule update --init
-brew install sdl3
+brew install sdl3                  # macOS
+sudo apt install libsdl3-dev       # Ubuntu 25.04 or later
+pacman -S make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-sdl3   # MSYS2 UCRT64
 make
 make run
 make headless   # CLI harness: run N seconds, dump the screen
 ```
+
+On macOS the menus are in the menu bar with Cmd shortcuts. On Linux and Windows, right-click the window (or press the Menu key) for the same menus, and use Alt where this README says Cmd. Settings and data live in `%APPDATA%\sham7x0` and `%LOCALAPPDATA%\sham7x0` on Windows. Serial ports are `/dev/cu.*` on macOS, `/dev/ttyUSB*` and `/dev/ttyACM*` on Linux and `COMn` on Windows. Windows has no virtual port; pair two ports with com0com instead.
 
 `make TOUCHSCREEN=1` (macOS only) adds View > Touchscreen Mode and `--touchscreen[=NAME]`, which cover a TETRA USB touch display (or the display named `NAME`) with the device and read its touch panel through IOKit.
 
