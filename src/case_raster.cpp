@@ -288,43 +288,14 @@ float hinge_profile(const CaseLayer &layer, float y, float scale) {
     return start * (1.0f - arrive) + slope * (t - 6 * t3 + 8 * t4 - 3 * t5) + level * arrive;
 }
 
-void apply_dish(const CaseLayer &layer, const Placement &place, Surface &surface) {
-    const ImRect &box = layer.edges;
-    float band = std::max(0.001f, layer.radius);
-    float softness = band * 0.3f;
-    float height = layer.height * place.scale;
-    int x0 = std::max(0, (int)floorf(place.pixel_x(box.Min.x))), x1 = std::min(surface.width, (int)ceilf(place.pixel_x(box.Max.x)));
-    int y0 = std::max(0, (int)floorf(place.pixel_y(box.Min.y))), y1 = std::min(surface.height, (int)ceilf(place.pixel_y(box.Max.y)));
-    parallel_rows(std::max(0, y1 - y0), [&](int from, int to) {
-        for (int y = y0 + from; y < y0 + to; y++) {
-            float top = place.logical_y(y) - box.Min.y;
-            for (int x = x0; x < x1; x++) {
-                size_t index = (size_t)y * surface.width + x;
-                if (surface.alpha[index] <= 0) continue;
-                float left = place.logical_x(x) - box.Min.x, right = box.Max.x - place.logical_x(x);
-                float nearest = std::min(top, std::min(left, right));
-                float spread = expf((nearest - top) / softness) + expf((nearest - left) / softness) + expf((nearest - right) / softness);
-                float distance = nearest - softness * logf(spread);
-                float t = clamp01(distance / band);
-                float falling = 1.0f - t;
-                surface.relief[index] -= height * (1.0f - falling * falling * falling) * smoothstep(t / 0.15f);
-            }
-        }
-    });
-}
-
 void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surface) {
-    if (layer.kind == CASE_DISH) {
-        apply_dish(layer, place, surface);
-        return;
-    }
     if (layer.outline.size() < 3) return;
     std::vector<ImVec2> outline;
     for (const ImVec2 &point : layer.outline) outline.push_back(place.pixel(point));
     float radius = std::max(0.0f, layer.radius * place.scale);
     outline = smoothed(outline, std::max(1.5f, radius / 8.0f));
     ImRect edges(place.pixel_x(layer.edges.Min.x), place.pixel_y(layer.edges.Min.y), place.pixel_x(layer.edges.Max.x), place.pixel_y(layer.edges.Max.y));
-    bool full_edges = layer.kind != CASE_GROOVE;
+    bool full_edges = layer.kind != CASE_GROOVE && layer.kind != CASE_DISH;
     ImRect everything(-FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX);
     bool cylinder = layer.kind == CASE_CYLINDER;
     float band = cylinder || layer.kind == CASE_RAISE ? 0.0f : radius;
@@ -375,6 +346,11 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
                     surface.relief[index] -= height * depth;
                     Colour under = unpack(surface.albedo[index]);
                     surface.albedo[index] = pack(blend(under, Colour{ 0, 0, 0 }, depth * layer.tint));
+                } else if (layer.kind == CASE_DISH) {
+                    if (distance <= 0 || surface.alpha[index] <= 0) continue;
+                    float t = radius > 0 ? clamp01(distance / radius) : 1.0f;
+                    float rest = 1.0f - t;
+                    surface.relief[index] -= height * (1.0f - rest * rest * rest * (1.0f + 3.0f * t));
                 } else if (layer.kind == CASE_RAISE) {
                     if (distance <= -1.5f || surface.alpha[index] <= 0 || axis_half <= 0) continue;
                     float logical_y = place.logical_y(y);
