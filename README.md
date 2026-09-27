@@ -1,13 +1,13 @@
 # SHAM-7X0
 
-Sharp Handheld ApproxiMation: a proof of concept emulator for the Sharp OZ-750 and ZQ-770 organisers, running the real firmware behind the Pocket front-end (bezel, keyboard, LCD simulation).
+Sharp Handheld ApproxiMation: a proof of concept emulator for the Sharp OZ-750 and ZQ-770 organisers, running the real firmware behind a realistic-looking front-end (bezel, keyboard, LCD simulation).
 
-The firmware is not included. Put one or both of these in the ROM folder, `$XDG_DATA_HOME/sham7x0/rom` (default `~/.local/share/sham7x0/rom`). They're recognised by size and SHA-256, so any file name works; with none found the emulator shows this table and a button to open the folder.
+The firmware is not included. Put one or both of these in the ROM folder, `$XDG_DATA_HOME/sham7x0/rom` (default `~/.local/share/sham7x0/rom`). They're recognised by size and SHA-256, so any file name works:
 
 | Firmware | Size | SHA-256 | Emulated as |
 |---|---|---|---|
 | OS 1.62: `r162.da1` from the Sharp System Update Utility v1.62 | 589824 | `a66c0b0e602464d44e1fb5083fb0e2b6e8d28ae920016875abfc51222c9b8311` | OZ-750 |
-| OS 2.1: pages 000-047 of a ZQ-770's flash (wizard-dev `dumps/`) | 589824 | `e56c8391f94f579505d41c3d05d0b103801cb340648c4c79e9898b44ec19812a` | ZQ-770 |
+| OS 2.1: pages 000-047 of a ZQ-770's flash | 589824 | `e56c8391f94f579505d41c3d05d0b103801cb340648c4c79e9898b44ec19812a` | ZQ-770 |
 
 Pick between them in Emulation > Firmware. `--rom=FILE` runs any image, known or not. If the ROM folder is empty, `./rom` is tried too.
 
@@ -21,7 +21,7 @@ Files:
 
 `--data=DIR` keeps all three in `DIR` (`DIR/emu.ini`, `DIR/rom/`, and the state files in `DIR`) instead.
 
-A saved machine holds the CPU registers, the hardware state (ports, windows, interrupts, RTC, UART, flash command state), all emulated SRAM, and the flash data area from page 048 up, about 3.9MB in all. The firmware pages 000-047 aren't saved; they come from the ROM file on each launch, so a save only fits the firmware it was made with.
+A saved machine holds the CPU registers, the hardware state (ports, windows, interrupts, RTC, UART, flash command state), all emulated SRAM, and the flash data area from page 048 up, totalling about 3.9MB. The firmware pages 000-047 aren't saved; they come from the ROM file on each launch. A save is only compatible with the firmware it was made with.
 
 `--model=OZ-750|ZQ-770` overrides the hardware the firmware runs on; it also sets the model printed on the case. The ZQ-770 has one 128KB SRAM mirrored across pages 400-4FF, nothing at 500 (open bus), the UART mirrored at ports 48-4F, undecoded ports reading as open bus, and port 12 reading F8. OS 2.1 ignores the keyboard unless port 12 bit 4 is set.
 
@@ -47,7 +47,7 @@ The machine state is saved to the firmware's state file on exit and every minute
 
 Clicked keyboard keys go straight to the key matrix, so Shift, 2nd and CAPS behave as the firmware decides. A clicked left Shift stays down until the next key. Host typing and the bezel keys are translated to matrix presses.
 
-The LCD draws at whole pixel scales, so the window snaps to the nearest size that fits the device, no smaller than the smallest scale. With the console shown, width sets the device size and height the console.
+The LCD draws at whole pixel scales; the window snaps to the nearest size that fits the device, no smaller than the smallest scale. With the console shown, width sets the device size and height the console.
 
 View > Borderless (Cmd-Shift-B, `--borderless`) drops the window frame and background so only the device sits on the desktop, sized to the current layout. Drag it by the case, or by the LCD in Screen Only. The console is hidden while it's on; Show Console or Focus Console turns it off.
 
@@ -83,7 +83,7 @@ The data stream is `"F","S1:MEMO.BOX"` (or `SCHEDUL1.BOX`, `ANNIV1.BOX`, `TODO.B
 
 Install > App Browser (Cmd-Shift-I, `--menu=apps`) opens a separate window that searches the `index.json` in each of those directories by title, description and category, shows the screenshot and installs the selected program, memo or schedule. Up/Down and Page Up/Down move the selection, Enter or a double-click installs. Each `index.json` is an array of objects with `file`, `original_file`, `title`, `data_type`, `category`, `description`, `alert`, `source_url` and `screenshot` (relative to the directory).
 
-A slot is 32KB at page 60 + 4n, ten in all:
+A slot is 32KB at page 60 + 4n, ten total:
 
 | Offset | Content |
 |---|---|
