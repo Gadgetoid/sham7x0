@@ -2,6 +2,8 @@
 
 Sharp Handheld ApproxiMation: a proof of concept emulator for the Sharp OZ-750 and ZQ-770 organisers, running the real firmware behind a realistic-looking front-end (bezel, keyboard, LCD simulation).
 
+![The emulated OZ-750 in the Screen & Keyboard layout, backlight on, showing the main menu](docs/screenshots/device.png)
+
 The firmware is not included. Put one or both of these in the ROM folder, `$XDG_DATA_HOME/sham7x0/rom` (default `~/.local/share/sham7x0/rom`). They're recognised by size and SHA-256, so any file name works:
 
 | Firmware | Size | SHA-256 | Emulated as |
@@ -41,7 +43,13 @@ make headless   # CLI harness: run N seconds, dump the screen
 
 A blank machine reports "memory not initialized". Choose Run > Initialize Memory (or type `init` in the console) to reset with ON held, then press ENTER to initialise. The setup wizard follows.
 
+| Not initialized | Initialize Memory | Setup wizard |
+|---|---|---|
+| ![Memory not initialized message](docs/screenshots/not_initialized.png) | ![Initialize memory confirmation](docs/screenshots/initialize.png) | ![Setup wizard welcome screen](docs/screenshots/setup.png) |
+
 Console commands: `reset`, `init`, `testmode`, `on`, `install PATH`, `save`, `pc`, `trace on`, `trace off`. Run > Factory Test Mode (or `testmode`) resets with ESC+D held, which opens the firmware's factory test menus. The lid up/down keys change page and digits pick a test. Cmd-R resets back out; like any reset, that goes through the contrast screen first. Some tests (RAM FILL, the FLASH ROM items, CLEAR ADDIN AREA) overwrite memory. Cmd-R resets, the bezel POWER key presses ON.
+
+![Factory test mode, page 1 of 5](docs/screenshots/test_mode.png)
 
 The machine state is saved to the firmware's state file on exit and every minute, and restored on launch with the clock advanced by the time away. `--fresh` ignores it. Screenshot runs don't touch it.
 
@@ -59,7 +67,9 @@ View > Compact (`--compact`) drops the hinge and joins the lid and keyboard at a
 ./headless rom/os2.1-firmware.bin --model=ZQ-770 --seconds=10 --keys=0:99.0/1.5,4.13:6.6/0.3 --pbm=out.pbm
 ```
 
-Headless keys are `SECONDS:COLUMN.ROW/HOLD`. Column 99 is the ON key. Headless defaults to `--model=OZ-750`.
+Headless keys are `SECONDS:COLUMN.ROW/HOLD`. Column 99 is the ON key. Headless defaults to `--model=OZ-750`. `--lcd=FILE` saves the final screen through the LCD simulation as a PPM, lit if the firmware has the backlight on, at `--lcd-cell=N` pixels per dot (default 4).
+
+`python3 tools/readme_screenshots.py` regenerates the pictures in `docs/screenshots/`. It builds the test states first and needs the test apps in `apps/`.
 
 `--serial[=TARGET]` connects the UART. A character device such as `/dev/cu.usbmodem1101` is opened as a real serial port, and its baud rate follows the divisor the program sets (WizTerm defaults to 9600). Any other `TARGET` gets a pty symlinked there, and plain `--serial` gets an unlinked pty. Headless runs in real time with it, and `--serial-log=FILE` records the traffic. PC SYNC (2nd, MENU) and WizTerm work against it.
 
@@ -69,9 +79,23 @@ In the emulator, pick a port from Emulation > Serial Port (the list of `/dev/cu.
 ./headless rom/r162.da1 --load=STATE --seconds=600 --serial=/tmp/wizard --keys=0.6:0.6/0.2,1.6:1.6/0.2
 ```
 
+## Screens
+
+| Main menu | Main menu, backlight on |
+|---|---|
+| ![Main menu](docs/screenshots/main_menu.png) | ![Main menu with the backlight on](docs/screenshots/main_menu_lit.png) |
+
+| Calendar | World clock | New memo |
+|---|---|---|
+| ![Calendar, backlight on](docs/screenshots/calendar.png) | ![World clock](docs/screenshots/clock.png) | ![Typing a new memo, backlight on](docs/screenshots/memo.png) |
+
 ## Installing programs
 
 Install > Install .wzd (Cmd-I), `--install=FILE` or the console `install PATH` writes a BASIC or machine code `.wzd` straight into a free My Programs slot. Put test files in `apps/` (ignored by git), sorted into `programs/`, `basic/`, `memo/` and `schedule/` by data type. MEMO and SCHEDULE `.wzd` files are sent the way the PC software did: the emulator presses 2nd, MENU (PC SYNC) and plays the PC side of the link over the emulated UART, so the firmware files the records itself. Transfers queue, run at the organizer's 9600 baud, and show progress above the console (or bottom left when it's hidden) and in the App Browser. `headless --install` does the same.
+
+| My Programs | BASIC: Pegs | Machine code: Pong | Memo sent over PC SYNC |
+|---|---|---|---|
+| ![My Programs listing three installed programs](docs/screenshots/programs.png) | ![Pegs, a BASIC program, running](docs/screenshots/basic_program.png) | ![C Pong menu, backlight on](docs/screenshots/machine_code_program.png) | ![Memo list with the received Chili Joke memo](docs/screenshots/memo_received.png) |
 
 ### PC SYNC protocol
 

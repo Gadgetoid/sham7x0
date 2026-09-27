@@ -44,7 +44,6 @@
 #define MAX_CATCH_UP_MS    100
 #define AUTOSAVE_MS        60000
 #define MAX_CLOCK_CATCH_UP (400LL * 24 * 60 * 60)
-#define DEFAULT_CONTRAST   32
 #define AUDIO_LATENCY_MS   40
 #define MAX_LINKS          16
 
@@ -112,7 +111,7 @@ static char state_path[1024];
 static uint32_t last_save_ms = 0;
 static uint64_t sound_cursor = 0;
 static float sound_frequency = 0;
-static machine_lcd_t shown_lcd = { true, DEFAULT_CONTRAST, false };
+static machine_lcd_t shown_lcd = { true, MACHINE_DEFAULT_CONTRAST, false };
 static serial_bridge_t *serial = NULL;
 static bool backlight_timeout = false;
 static pclink_t *links[MAX_LINKS];
@@ -445,7 +444,7 @@ static void present_lcd(void) {
     machine_lcd_t lcd = machine_lcd(machine);
     if (lcd.on != shown_lcd.on) lcd_set_power(lcd.on);
     if (lcd.backlight != lcd_get_backlight()) lcd_set_backlight(lcd.backlight);
-    if (lcd.contrast != shown_lcd.contrast && lcd.on) lcd_set_contrast(5 + (lcd.contrast - DEFAULT_CONTRAST) / 3);
+    if (lcd.contrast != shown_lcd.contrast && lcd.on) lcd_set_contrast(5 + (lcd.contrast - MACHINE_DEFAULT_CONTRAST) / 3);
     shown_lcd = lcd;
 }
 

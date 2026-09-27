@@ -4,6 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "lcd.h"
 #include "machine.h"
 #include "pclink.h"
 #include "serial.h"
@@ -71,6 +72,29 @@ static void save_pbm(const uint8_t *screen, const char *path) {
     fclose(file);
 }
 
+static void save_lcd(const uint8_t *screen, machine_lcd_t lcd, int cell, const char *path) {
+    for (int y = 0; y < LCD_HEIGHT; y++) {
+        for (int x = 0; x < LCD_WIDTH; x++) lcd_framebuffer[y * LCD_WIDTH + x] = pixel(screen, x, y) ? 3 : 0;
+    }
+    lcd_set_power(lcd.on);
+    lcd_set_backlight(lcd.backlight);
+    if (lcd.on && lcd.contrast != MACHINE_DEFAULT_CONTRAST) lcd_set_contrast(5 + (lcd.contrast - MACHINE_DEFAULT_CONTRAST) / 3);
+    lcd_set_response(0);
+    lcd_compose_setup(cell);
+    lcd_compose(1.0f);
+    FILE *file = fopen(path, "wb");
+    if (!file) return;
+    int width = lcd_compose_width(), height = lcd_compose_height();
+    const uint32_t *pixels = lcd_compose_pixels();
+    fprintf(file, "P6\n%d %d\n255\n", width, height);
+    for (int i = 0; i < width * height; i++) {
+        fputc(pixels[i] & 0xff, file);
+        fputc(pixels[i] >> 8 & 0xff, file);
+        fputc(pixels[i] >> 16 & 0xff, file);
+    }
+    fclose(file);
+}
+
 static int parse_keys(const char *spec, key_event_t *events, int capacity) {
     int count = 0;
     const char *cursor = spec;
@@ -90,6 +114,8 @@ int main(int argc, char **argv) {
     const char *rom_path = NULL;
     machine_model_t model = MACHINE_MODEL_OZ750;
     const char *pbm_path = NULL;
+    const char *lcd_path = NULL;
+    int lcd_cell = 4;
     const char *load_path = NULL;
     const char *save_path = NULL;
     const char *install_paths[MACHINE_ADDIN_SLOTS];
@@ -124,6 +150,8 @@ int main(int argc, char **argv) {
         }
         if (strncmp(argv[i], "--seconds=", 10) == 0) seconds = atof(argv[i] + 10);
         else if (strncmp(argv[i], "--pbm=", 6) == 0) pbm_path = argv[i] + 6;
+        else if (strncmp(argv[i], "--lcd=", 6) == 0) lcd_path = argv[i] + 6;
+        else if (strncmp(argv[i], "--lcd-cell=", 11) == 0) lcd_cell = atoi(argv[i] + 11);
         else if (strncmp(argv[i], "--load=", 7) == 0) load_path = argv[i] + 7;
         else if (strncmp(argv[i], "--save=", 7) == 0) save_path = argv[i] + 7;
         else if (strncmp(argv[i], "--install=", 10) == 0 && install_count < MACHINE_ADDIN_SLOTS) install_paths[install_count++] = argv[i] + 10;
@@ -142,7 +170,7 @@ int main(int argc, char **argv) {
         else rom_path = argv[i];
     }
     if (!rom_path) {
-        fprintf(stderr, "usage: headless ROM [--seconds=N] [--pbm=FILE] [--load=STATE] [--save=STATE] [--trace-ports] [--keys=T:COL.ROW/HOLD,...] [--model=OZ-750|ZQ-770] [--serial[=LINK|DEVICE]] [--serial-log=FILE] [--backlight-timeout]\n");
+        fprintf(stderr, "usage: headless ROM [--seconds=N] [--pbm=FILE] [--lcd=FILE] [--lcd-cell=N] [--load=STATE] [--save=STATE] [--trace-ports] [--keys=T:COL.ROW/HOLD,...] [--model=OZ-750|ZQ-770] [--serial[=LINK|DEVICE]] [--serial-log=FILE] [--backlight-timeout]\n");
         return 1;
     }
     size_t size = 0;
@@ -277,6 +305,7 @@ int main(int argc, char **argv) {
     if (dump_page >= 0 && machine_read_page(machine, (uint16_t)dump_page, page_copy, sizeof page_copy)) screen = page_copy;
     print_screen(screen);
     if (pbm_path) save_pbm(screen, pbm_path);
+    if (lcd_path) save_lcd(screen, lcd, lcd_cell, lcd_path);
     if (save_path && !machine_save(machine, save_path, 0)) {
         fprintf(stderr, "cannot save state %s\n", save_path);
         return 1;

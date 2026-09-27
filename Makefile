@@ -58,8 +58,8 @@ $(BUILD)/%.om: %.m
 $(PROG): $(OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-headless: tools/headless.c $(SRC_MACHINE) src/machine.h src/wzd.h src/serial.h src/pclink.h
-	$(CC) -Wall -O2 -Isrc -I$(Z80) -o $@ tools/headless.c $(SRC_MACHINE)
+headless: tools/headless.c $(SRC_MACHINE) src/lcd.c src/machine.h src/wzd.h src/serial.h src/pclink.h src/lcd.h
+	$(CC) -Wall -O2 -fno-common -Isrc -I$(Z80) -o $@ tools/headless.c $(SRC_MACHINE) src/lcd.c
 
 -include $(DEPS)
 

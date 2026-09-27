@@ -37,6 +37,8 @@ typedef struct {
     bool backlight;
 } machine_lcd_t;
 
+#define MACHINE_DEFAULT_CONTRAST 32
+
 machine_t     *machine_create(const uint8_t *flash_image, size_t flash_size, machine_model_t model);
 machine_model_t machine_get_model(machine_t *machine);
 void           machine_set_backlight_timeout(machine_t *machine, bool enabled);
