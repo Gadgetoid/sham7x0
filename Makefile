@@ -10,7 +10,7 @@ CFLAGS  += -I. -Isrc -Ilib -I$(Z80) -I$(IMGUI) -I$(IMGUI)/backends
 CFLAGS  += -Wall -O2 -fno-common -MMD -MP
 CFLAGS  += $(shell pkg-config --cflags sdl3)
 
-LDFLAGS += $(shell pkg-config --libs sdl3) -framework CoreServices -framework Cocoa -framework IOKit
+LDFLAGS += $(shell pkg-config --libs sdl3) -framework CoreServices -framework Cocoa
 
 CXXFLAGS = $(filter-out -std=c99,$(CFLAGS)) -std=c++17
 
@@ -21,8 +21,18 @@ SRC_APP = \
 	src/runtime.c \
 	src/keys.c \
 	src/lcd.c \
-	src/beeper.c \
-	src/touch_macos.c
+	src/beeper.c
+
+TOUCHSCREEN ?= 0
+ifeq ($(TOUCHSCREEN),1)
+BUILD   := $(BUILD)/touchscreen
+CFLAGS  += -DSHAM_TOUCHSCREEN
+LDFLAGS += -framework IOKit
+SRC_APP += src/touch_macos.c
+endif
+
+CONFIG = build/config
+$(shell mkdir -p build; echo "TOUCHSCREEN=$(TOUCHSCREEN)" | cmp -s - $(CONFIG) || { echo "TOUCHSCREEN=$(TOUCHSCREEN)" > $(CONFIG); rm -f $(PROG); })
 
 SRC_OBJC = src/menu_macos.m
 

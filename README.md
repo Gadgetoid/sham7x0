@@ -39,6 +39,8 @@ make run
 make headless   # CLI harness: run N seconds, dump the screen
 ```
 
+`make TOUCHSCREEN=1` (macOS only) adds View > Touchscreen Mode and `--touchscreen[=NAME]`, which cover a TETRA USB touch display (or the display named `NAME`) with the device and read its touch panel through IOKit.
+
 ## First run
 
 A blank machine reports "memory not initialized". Choose Run > Initialize Memory (or type `init` in the console) to reset with ON held, then press ENTER to initialise. The setup wizard follows.
