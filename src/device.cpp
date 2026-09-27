@@ -1263,7 +1263,10 @@ const float KB_SEAM_WIDTH = 1.1f;
 const float KB_SEAM_DEPTH = 0.8f;
 const float KB_FACE_RELIEF = 1.2f;
 const float KB_FACE_EDGE = 3.0f;
+const float KB_SHOULDER_WIDTH = 9.0f;
+const float KB_SHOULDER_DROP = 4.0f;
 const float ROLL_JOIN = 0.2f;
+const float ROLL_END_TAPER = 30.0f;
 const float ROLL_KEY_CLEARANCE = 4.0f;
 const float ARCH_GROOVE_WIDTH = 6.0f;
 const float ARCH_GROOVE_DEPTH = 6.0f;
@@ -1365,6 +1368,14 @@ void add_hinge(CaseScene &scene, const DeviceLayout &layout) {
     }
 }
 
+CaseLayer keyboard_shoulder(const Shape &face, const ImRect &skip, float k) {
+    CaseLayer shoulder = case_layer(CASE_SHOULDER, face);
+    shoulder.skip = skip;
+    shoulder.radius = KB_SHOULDER_WIDTH * k;
+    shoulder.height = KB_SHOULDER_DROP * k;
+    return shoulder;
+}
+
 void add_keyboard(CaseScene &scene, const DeviceLayout &layout) {
     float u = layout.u;
     KeyboardFrame frame = keyboard_frame(layout);
@@ -1387,6 +1398,7 @@ void add_keyboard(CaseScene &scene, const DeviceLayout &layout) {
     top.radius = KB_FACE_EDGE * k;
     scene.layers.push_back(top);
     if (layout.compact) {
+        scene.layers.push_back(keyboard_shoulder(face, ImRect(-FLT_MAX, -FLT_MAX, FLT_MAX, face_box.Min.y + k), k));
         CaseLayer joint = case_layer(CASE_GROOVE, face);
         joint.edges = ImRect(face_box.Min.x - k, -FLT_MAX, face_box.Max.x + k, face_box.Min.y + k);
         joint.radius = JOINT_GROOVE_WIDTH * u;
@@ -1399,11 +1411,14 @@ void add_keyboard(CaseScene &scene, const DeviceLayout &layout) {
     hinge_span(layout, left, right, middle, span);
     ImRect arch(bounds(middle).Min.x, -FLT_MAX, bounds(middle).Max.x, span.Max.y - 0.5f * u);
     CaseLayer rise = case_layer(CASE_RAISE, face);
+    rise.edges = arch;
+    rise.taper = ROLL_END_TAPER * u;
     rise.axis_top = span.Min.y;
     rise.axis_bottom = span.Max.y;
     rise.height = span.GetHeight() * HINGE_ROUNDNESS;
     set_roll(rise, layout);
     scene.layers.push_back(rise);
+    scene.layers.push_back(keyboard_shoulder(face, arch, k));
     CaseLayer groove = case_layer(CASE_GROOVE, face);
     groove.edges = arch;
     groove.radius = ARCH_GROOVE_WIDTH * u;

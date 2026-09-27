@@ -122,7 +122,7 @@ void fill_inside(const std::vector<ImVec2> &outline, const ImRect *ends, Field &
     }
 }
 
-void measure_edges(const std::vector<ImVec2> &outline, const ImRect &edges, Field &field) {
+void measure_edges(const std::vector<ImVec2> &outline, const ImRect &edges, const ImRect &skip, Field &field) {
     struct Segment {
         ImVec2 a, along;
         float length_squared;
@@ -132,7 +132,7 @@ void measure_edges(const std::vector<ImVec2> &outline, const ImRect &edges, Fiel
     size_t count = outline.size();
     for (size_t i = 0; i < count; i++) {
         ImVec2 a = outline[i], b = outline[(i + 1) % count];
-        if (!edges.Contains((a + b) * 0.5f)) continue;
+        if (!edges.Contains((a + b) * 0.5f) || skip.Contains((a + b) * 0.5f)) continue;
         Segment segment;
         segment.a = a;
         segment.along = b - a;
@@ -180,7 +180,8 @@ void soften_across(Field &field, int reach) {
     }
 }
 
-Field signed_field(const std::vector<ImVec2> &outline, const ImRect &edges, float band, const Surface &surface, const ImRect *ends = nullptr) {
+Field signed_field(const std::vector<ImVec2> &outline, const ImRect &edges, float band, const Surface &surface, const ImRect *ends = nullptr,
+                   const ImRect &skip = ImRect(FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX)) {
     Field field;
     field.band = band;
     ImRect box(outline[0], outline[0]);
@@ -192,7 +193,7 @@ Field signed_field(const std::vector<ImVec2> &outline, const ImRect &edges, floa
     field.distance.assign((size_t)field.width * field.height, -band);
     fill_inside(outline, ends, field);
     if (ends) soften_across(field, 4);
-    measure_edges(outline, edges, field);
+    measure_edges(outline, edges, skip, field);
     return field;
 }
 
@@ -302,7 +303,8 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
     ImRect everything(-FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX);
     bool cylinder = layer.kind == CASE_CYLINDER;
     float band = cylinder || layer.kind == CASE_RAISE ? 0.0f : radius;
-    Field field = signed_field(outline, full_edges ? everything : edges, band + 2.0f, surface, cylinder ? &edges : nullptr);
+    ImRect skip(place.pixel_x(layer.skip.Min.x), place.pixel_y(layer.skip.Min.y), place.pixel_x(layer.skip.Max.x), place.pixel_y(layer.skip.Max.y));
+    Field field = signed_field(outline, full_edges ? everything : edges, band + 2.0f, surface, cylinder ? &edges : nullptr, skip);
     float height = layer.height * place.scale, base = layer.base * place.scale;
     float axis_half = (layer.axis_bottom - layer.axis_top) * 0.5f;
 
@@ -350,6 +352,10 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
                     surface.relief[index] -= height * depth;
                     Colour under = unpack(surface.albedo[index]);
                     surface.albedo[index] = pack(blend(under, Colour{ 0, 0, 0 }, depth * layer.tint));
+                } else if (layer.kind == CASE_SHOULDER) {
+                    if (distance <= -0.5f || surface.alpha[index] <= 0) continue;
+                    float rest = 1.0f - (radius > 0 ? clamp01(std::max(0.0f, distance) / radius) : 1.0f);
+                    surface.relief[index] -= height * rest * rest;
                 } else if (layer.kind == CASE_DISH) {
                     if (distance <= 0 || surface.alpha[index] <= 0) continue;
                     float t = radius > 0 ? clamp01(distance / radius) : 1.0f;
@@ -359,7 +365,15 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
                     if (distance <= -1.5f || surface.alpha[index] <= 0 || axis_half <= 0) continue;
                     float logical_y = place.logical_y(y);
                     if (logical_y >= layer.roll_end) continue;
-                    surface.relief[index] = std::max(surface.relief[index], hinge_profile(layer, logical_y, place.scale));
+                    float logical_x = place.logical_x(x);
+                    float reach = 1.0f;
+                    if (layer.taper > 0) {
+                        float outside = std::max(layer.edges.Min.x - logical_x, logical_x - layer.edges.Max.x);
+                        reach = 1.0f - smoothstep(outside / layer.taper);
+                    }
+                    if (reach <= 0) continue;
+                    float current = surface.relief[index];
+                    surface.relief[index] = current + (std::max(current, hinge_profile(layer, logical_y, place.scale)) - current) * reach;
                 }
             }
         }

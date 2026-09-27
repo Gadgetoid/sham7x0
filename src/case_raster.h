@@ -6,7 +6,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 
-enum CaseLayerKind { CASE_SOLID, CASE_CYLINDER, CASE_RECESS, CASE_GROOVE, CASE_RAISE, CASE_DISH };
+enum CaseLayerKind { CASE_SOLID, CASE_CYLINDER, CASE_RECESS, CASE_GROOVE, CASE_RAISE, CASE_DISH, CASE_SHOULDER };
 
 enum CaseRecessShape { CASE_BOWL, CASE_TROUGH, CASE_SHARP };
 
@@ -14,6 +14,7 @@ struct CaseLayer {
     CaseLayerKind kind = CASE_SOLID;
     std::vector<ImVec2> outline;
     ImRect edges = ImRect(-FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX);
+    ImRect skip = ImRect(FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX);
     ImU32 top_colour = 0;
     ImU32 bottom_colour = 0;
     float gradient_top = 0;
