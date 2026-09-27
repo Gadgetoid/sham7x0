@@ -1673,7 +1673,12 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     }
     Shape body = state.show_keys ? lid_body(layout) : Shape();
     if (state.focused && !state.borderless) {
-        draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
+        if (state.show_keys) {
+            Shape ring = outset(body, 3.0f);
+            draw->AddPolyline(ring.data(), (int)ring.size(), IM_COL32(90, 200, 180, 160), ImDrawFlags_Closed, 2.0f);
+        } else {
+            draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
+        }
     }
     if (state.show_keys) {
         fill(draw, translated(body, ImVec2(0, 4)), IM_COL32(0, 0, 0, 90), IM_COL32(0, 0, 0, 90));
