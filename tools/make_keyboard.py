@@ -116,6 +116,8 @@ def apply_svg(keys, layout, path):
     def mapped(point):
         return left + (point[0] - svg_left) * scale, top + (point[1] - svg_top) * scale
 
+    layout["mm"] = (svg_left - left / scale, svg_top - top / scale, scale)
+
     shape_centres = normalised([svg_keyboard.centre(shape) for shape in shapes])
     key_centres = normalised([(k["x"], k["y"]) for k in keys])
     pairs = sorted((abs(a[0] - b[0]) + abs(a[1] - b[1]), si, ki)
@@ -266,6 +268,9 @@ def main():
         "static const float KB_WELL_X = {:.2f}f;".format(well["x"]),
         "static const float KB_WELL_Y = {:.2f}f;".format(well["y"]),
         "static const float KB_WELL_R = {:.2f}f;".format(well["r"]),
+        "static const float KB_MM_ORIGIN_X = {:.4f}f;".format(layout.get("mm", (0, 0, 1))[0]),
+        "static const float KB_MM_ORIGIN_Y = {:.4f}f;".format(layout.get("mm", (0, 0, 1))[1]),
+        "static const float KB_UNITS_PER_MM = {:.5f}f;".format(layout.get("mm", (0, 0, 1))[2]),
         "static const float KB_WELL_SLOPE = {:.2f}f;".format(well["slope"]),
         "static const float KB_LABEL_CLEARANCE = {:.2f}f;".format(layout["label_clearance"]),
         "static const float KB_LEGEND_ALPHA = {:.2f}f;".format(layout["fonts"]["alpha"]),

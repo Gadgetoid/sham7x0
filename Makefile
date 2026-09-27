@@ -72,8 +72,8 @@ test: headless
 	python3 tools/test.py
 
 keyboard:
-	python3 tools/make_keyboard.py tools/keyboard_layout.json src/keyboard_layout.h tools/keyboard_layout.svg
-	python3 tools/make_lid.py tools/lid_layout.svg src/lid_layout.h
+	python3 tools/make_keyboard.py tools/keyboard_layout.json src/keyboard_layout.h tools/zq770_layout.svg
+	python3 tools/make_lid.py tools/zq770_layout.svg src/lid_layout.h
 
 clean:
 	rm -rf $(BUILD) $(PROG) headless

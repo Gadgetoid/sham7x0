@@ -210,6 +210,22 @@ def bridge(outer, holes):
     return outer
 
 
+def elements(path):
+    text = open(path).read()
+    stack = [((1.0, 0.0, 0.0, 1.0, 0.0, 0.0), "")]
+    for match in re.finditer(r"<(/?)(g|path|rect|circle|ellipse)\b(.*?)(/?)>", text, re.S):
+        closing, tag, body, self_closing = match.groups()
+        if tag == "g":
+            if closing:
+                stack.pop()
+            elif not self_closing:
+                stack.append((multiply(stack[-1][0], matrix(attribute(body, "transform"))), attribute(body, "inkscape:label") or ""))
+            continue
+        if closing:
+            continue
+        yield tag, body, multiply(stack[-1][0], matrix(attribute(body, "transform"))), stack[-1][1]
+
+
 def ellipse(d):
     values = [float(v) for v in NUMBER.findall(d)]
     return values[0] - values[2], values[1], values[2], values[3]
@@ -220,15 +236,12 @@ def attribute(body, name):
     return match.group(1) if match else None
 
 
-def load(path):
-    text = open(path).read()
-    layer = re.search(r"<g\b[^>]*>", text)
-    base = matrix(attribute(layer.group(0), "transform")) if layer else matrix(None)
+def load(path, group="keyboard"):
     keys, circles, icons, locators = [], [], [], []
     label = None
-    for match in re.finditer(r"<(path|rect)\b(.*?)/>", text, re.S):
-        tag, body = match.groups()
-        transform = multiply(base, matrix(attribute(body, "transform")))
+    for tag, body, transform, layer in elements(path):
+        if layer != group or tag not in ("path", "rect"):
+            continue
         style = attribute(body, "style") or ""
         fill_match = re.search(r"fill:(#[0-9a-fA-F]+)", style)
         fill = fill_match.group(1).lower() if fill_match else ""
@@ -262,6 +275,10 @@ def centre(points):
 
 def triangulate(polygon):
     points = polygon if area(polygon) > 0 else polygon[::-1]
+    return [tuple(points[i] for i in triangle) for triangle in triangle_indices(points)]
+
+
+def triangle_indices(points):
     indices = list(range(len(points)))
     triangles = []
 
@@ -269,7 +286,7 @@ def triangulate(polygon):
         return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 
     def inside(p, a, b, c):
-        return cross(a, b, p) > 1e-12 and cross(b, c, p) > 1e-12 and cross(c, a, p) > 1e-12
+        return cross(a, b, p) >= -1e-9 and cross(b, c, p) >= -1e-9 and cross(c, a, p) >= -1e-9
 
     while len(indices) > 3:
         count = len(indices)
@@ -285,10 +302,10 @@ def triangulate(polygon):
         if ear is None:
             ear = min(range(count), key=lambda k: abs(cross(points[indices[k - 1]], points[indices[k]], points[indices[(k + 1) % count]])))
         else:
-            triangles.append((points[indices[ear - 1]], points[indices[ear]], points[indices[(ear + 1) % count]]))
+            triangles.append((indices[ear - 1], indices[ear], indices[(ear + 1) % count]))
         del indices[ear]
     if len(indices) == 3 and cross(points[indices[0]], points[indices[1]], points[indices[2]]) > 1e-12:
-        triangles.append(tuple(points[i] for i in indices))
+        triangles.append(tuple(indices))
     return triangles
 
 

@@ -8,10 +8,6 @@ import svg_keyboard as svg
 
 GLASS_UNITS = 282.0
 MARGIN_X = 3
-CASE_MARGIN_LEFT = 18.0
-CASE_MARGIN_RIGHT = 14.0
-CASE_MARGIN_TOP = 58.0
-CASE_MARGIN_BOTTOM = 22.0
 
 
 def rounded_rect(x, y, w, h, r):
@@ -28,14 +24,9 @@ def ellipse_points(cx, cy, rx, ry):
 
 
 def shapes(path):
-    text = open(path).read()
-    layer = re.search(r"<g\b[^>]*>", text)
-    base = svg.matrix(svg.attribute(layer.group(0), "transform"))
     found = []
-    for match in re.finditer(r"<(path|rect|circle|ellipse)\b(.*?)/>", text, re.S):
-        tag, body = match.groups()
+    for tag, body, transform, group in svg.elements(path):
         value = lambda name: svg.attribute(body, name)
-        transform = svg.multiply(base, svg.matrix(value("transform")))
         fill = re.search(r"fill:(#[0-9a-fA-F]{6})", value("style") or "")
         fill = fill.group(1).lower() if fill else ""
         if tag == "path":
@@ -48,7 +39,8 @@ def shapes(path):
             ry = float(value("r") or value("ry"))
             paths = [ellipse_points(float(value("cx")), float(value("cy")), rx, ry)]
         paths = [[svg.apply(transform, p) for p in path] for path in paths]
-        found.append({"tag": tag, "fill": fill, "paths": paths, "points": [p for path in paths for p in path]})
+        found.append({"tag": tag, "fill": fill, "paths": paths, "points": [p for path in paths for p in path],
+                      "label": value("inkscape:label") or "", "group": group})
     for shape in found:
         xs = [p[0] for p in shape["points"]]
         ys = [p[1] for p in shape["points"]]
@@ -58,33 +50,26 @@ def shapes(path):
     return found
 
 
+LABELS = {
+    "glass": "screen-area", "frame": "screen-recess", "light": "button-backlight", "light_icon": "icon-backlight",
+    "power": "button-power", "power_icon": "icon-power", "power_flute": "recess-power", "menu": "button-menu",
+    "menu_well": "recess-menu", "arrow_well": "up-down-buttons-recess", "up": "button-up", "down": "button-down",
+    "up_icon": "icon-arrow-up", "down_icon": "icon-arrow-down", "esc_well": "enter-esc-recess", "esc": "button-esc",
+    "enter": "button-enter", "body": "lid-shape", "hinge_left": "lid-hinge-left", "hinge_right": "lid-hinge-right",
+    "keyboard_hinge": "keyboard-hinge", "keyboard_body": "keyboard-shape",
+}
+SIDES = ("main", "tel", "cal", "memo", "prog")
+
+
 def classify(found):
-    glass = max((s for s in found if s["fill"] == "#008080" and s["tag"] == "rect"), key=lambda s: s["area"])
-    frame = next(s for s in found if s["fill"] == "#f9f9f9" and s["tag"] == "rect")
-    gx0, gy0, gx1, gy1 = glass["box"]
-    left = [s for s in found if s["centre"][0] < gx0]
-    right = [s for s in found if s["centre"][0] > gx1]
-    named = {"glass": glass, "frame": frame}
-    sides = sorted((s for s in left if s["fill"] == "#333333"), key=lambda s: s["centre"][1])
-    flutes = sorted((s for s in left if s["fill"] == "#f9f9f9"), key=lambda s: s["centre"][1])
-    for index, (key, flute) in enumerate(zip(sides, flutes)):
-        named["side_{}".format(index)] = key
-        named["flute_{}".format(index)] = flute
-    named["light"] = next(s for s in left if s["fill"] == "#008080")
-    named["light_icon"] = next(s for s in left if s["fill"] == "#b3b3b3")
-    named["power"] = next(s for s in right if s["fill"] == "#008080")
-    greys = sorted((s for s in right if s["fill"] == "#b3b3b3" and s["tag"] == "path"), key=lambda s: s["area"])
-    named["menu_well"] = next(s for s in right if s["fill"] == "#b3b3b3" and s["tag"] == "ellipse")
-    named["power_icon"], named["power_flute"] = greys[0], greys[-1]
-    named["menu"] = next(s for s in right if s["fill"] == "#333333" and s["tag"] == "ellipse")
-    wells = sorted((s for s in right if s["fill"] == "#333333" and s["tag"] == "path"), key=lambda s: s["centre"][1])
-    named["arrow_well"], named["esc_well"] = wells[0], wells[-1]
-    blues = sorted((s for s in right if s["fill"] == "#0000ff"), key=lambda s: s["centre"][1])
-    named["up"], named["down"] = blues
-    chevrons = sorted((s for s in right if s["fill"] == "#f9f9f9" and s["tag"] == "path"), key=lambda s: s["centre"][1])
-    named["up_icon"], named["down_icon"] = chevrons
-    circles = sorted((s for s in right if s["tag"] == "circle"), key=lambda s: s["area"])
-    named["esc"], named["enter"] = circles
+    by_label = {}
+    for shape in found:
+        if shape["group"] in ("lid", "Layer 1") and shape["label"]:
+            by_label[shape["label"]] = shape
+    named = {name: by_label[label] for name, label in LABELS.items()}
+    for index, side in enumerate(SIDES):
+        named["side_{}".format(index)] = by_label["button-" + side]
+        named["flute_{}".format(index)] = by_label["recess-" + side]
     return named
 
 
@@ -101,12 +86,15 @@ def main():
     grid_w = 240 + 2 * MARGIN_X
     grid_h = round(grid_w * (gy1 - gy0) / (gx1 - gx0))
     margin_y = (grid_h - 80) // 2
-    everything = [unit(p) for name, shape in named.items() if name not in ("glass",) for p in shape["points"]]
+    body = [unit(p) for p in named["body"]["points"]]
     half_width = GLASS_UNITS * grid_w / (80 + 2 * margin_y) / 2
-    min_x = min(p[0] for p in everything)
-    max_x = max(p[0] for p in everything)
-    min_y = min(p[1] for p in everything)
-    max_y = max(p[1] for p in everything)
+    min_x = min(p[0] for p in body)
+    max_x = max(p[0] for p in body)
+    min_y = min(p[1] for p in body)
+    max_y = max(p[1] for p in body)
+    keyboard = [unit(p) for p in named["keyboard_body"]["points"]]
+    keyboard_left = min(p[0] for p in keyboard)
+    shoulder = min(p[1] for p in keyboard if p[0] < keyboard_left + 15 * scale)
     lines = [
         "#pragma once",
         "",
@@ -116,14 +104,22 @@ def main():
         "    int regions;",
         "    const float *triangles;",
         "    int triangle_count;",
+        "    const int *indices;",
+        "    int index_count;",
         "};",
         "",
         "static const int LID_LCD_MARGIN_X = {};".format(MARGIN_X),
         "static const int LID_LCD_MARGIN_Y = {};".format(margin_y),
-        "static const float LID_LEFT_EXTENT = {:.2f}f;".format(-half_width - min_x + CASE_MARGIN_LEFT),
-        "static const float LID_RIGHT_EXTENT = {:.2f}f;".format(max_x - half_width + CASE_MARGIN_RIGHT),
-        "static const float LID_TOP_EXTENT = {:.2f}f;".format(-min_y + CASE_MARGIN_TOP),
-        "static const float LID_BOTTOM_EXTENT = {:.2f}f;".format(max_y - GLASS_UNITS + CASE_MARGIN_BOTTOM),
+        "static const float LID_LEFT_EXTENT = {:.2f}f;".format(-half_width - min_x),
+        "static const float LID_RIGHT_EXTENT = {:.2f}f;".format(max_x - half_width),
+        "static const float LID_TOP_EXTENT = {:.2f}f;".format(-min_y),
+        "static const float LID_BOTTOM_EXTENT = {:.2f}f;".format(max_y - GLASS_UNITS),
+        "static const float LID_BODY_RADIUS = {:.2f}f;".format(12.0 * scale),
+        "static const float LID_KEYBOARD_BOTTOM = {:.2f}f;".format(max(p[1] for p in keyboard)),
+        "static const float LID_COMPACT_SHIFT = {:.2f}f;".format(shoulder - max_y),
+        "static const float LID_UNITS_PER_MM = {:.5f}f;".format(scale),
+        "static const float LID_GLASS_MM_X = {:.4f}f;".format(centre_x),
+        "static const float LID_GLASS_MM_Y = {:.4f}f;".format(gy0),
     ]
     x0, y0, x1, y1 = named["frame"]["box"]
     (fx0, fy0), (fx1, fy1) = unit((x0, y0)), unit((x1, y1))
@@ -132,11 +128,14 @@ def main():
     lines.append("")
     order = ["side_{}".format(i) for i in range(5)] + ["flute_{}".format(i) for i in range(5)] + [
         "light", "light_icon", "power", "power_icon", "power_flute", "menu", "menu_well", "arrow_well", "up", "down", "up_icon",
-        "down_icon", "esc_well", "esc", "enter"]
+        "down_icon", "esc_well", "esc", "enter", "body", "hinge_left", "hinge_right", "keyboard_hinge", "keyboard_body"]
     for name in order:
         shape = named[name]
         polygons = shape["paths"] if name.endswith("_icon") else [shape["paths"][0]]
         polygons = [[unit(p) for p in polygon] for polygon in polygons]
+        if not name.endswith("_icon") and svg.area(polygons[0]) < 0:
+            polygons[0] = polygons[0][::-1]
+        indices = [] if name.endswith("_icon") else [i for triangle in svg.triangle_indices(polygons[0]) for i in triangle]
         triangles = [p for triangle in svg.icon_geometry(polygons)[0] for p in triangle] if name.endswith("_icon") else []
         upper = name.upper()
         lines.append("static const float LID_SHAPE_{}_POINTS[] = {{ {} }};".format(
@@ -146,8 +145,12 @@ def main():
         if triangles:
             triangle_array = "LID_SHAPE_{}_TRIANGLES".format(upper)
             lines.append("static const float {}[] = {{ {} }};".format(triangle_array, ", ".join("{:.2f}f, {:.2f}f".format(x, y) for x, y in triangles)))
-        lines.append("static const LidShape LID_SHAPE_{} = {{ LID_SHAPE_{}_POINTS, LID_SHAPE_{}_COUNTS, {}, {}, {} }};".format(
-            upper, upper, upper, len(polygons), triangle_array, len(triangles) // 3))
+        index_array = "nullptr"
+        if indices:
+            index_array = "LID_SHAPE_{}_INDICES".format(upper)
+            lines.append("static const int {}[] = {{ {} }};".format(index_array, ", ".join(str(i) for i in indices)))
+        lines.append("static const LidShape LID_SHAPE_{} = {{ LID_SHAPE_{}_POINTS, LID_SHAPE_{}_COUNTS, {}, {}, {}, {}, {} }};".format(
+            upper, upper, upper, len(polygons), triangle_array, len(triangles) // 3, index_array, len(indices)))
     open(sys.argv[2], "w").write("\n".join(lines) + "\n")
     print("{}: glass {:.1f}x{:.1f} mm, LCD margin {}x{}".format(sys.argv[2], gx1 - gx0, gy1 - gy0, MARGIN_X, margin_y))
 

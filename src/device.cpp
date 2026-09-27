@@ -456,7 +456,8 @@ std::vector<int> ear_clip(const Shape &polygon) {
                 int other = indices[j];
                 if (j == k || j == (k + 1) % count || j == (k + count - 1) % count) continue;
                 ImVec2 p = polygon[other];
-                empty = !(turn(a, b, p) > 0 && turn(b, c, p) > 0 && turn(c, a, p) > 0);
+                if ((p.x == a.x && p.y == a.y) || (p.x == b.x && p.y == b.y) || (p.x == c.x && p.y == c.y)) continue;
+                empty = !(turn(a, b, p) >= 0 && turn(b, c, p) >= 0 && turn(c, a, p) >= 0);
             }
             if (empty) ear = k;
         }
@@ -468,6 +469,17 @@ std::vector<int> ear_clip(const Shape &polygon) {
     }
     if (indices.size() == 3) result.insert(result.end(), indices.begin(), indices.end());
     return result;
+}
+
+void fill_polygon(ImDrawList *draw, const Shape &polygon, ImU32 colour, const std::vector<int> &indices = {}) {
+    std::vector<int> triangles = indices.empty() ? ear_clip(polygon) : indices;
+    draw->PrimReserve((int)triangles.size(), (int)polygon.size());
+    ImVec2 uv = draw->_Data->TexUvWhitePixel;
+    ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
+    for (const ImVec2 &point : polygon) draw->PrimWriteVtx(point, uv, colour);
+    for (int index : triangles) draw->PrimWriteIdx((ImDrawIdx)(base + index));
+    Shape edge = polygon;
+    draw->AddPolyline(edge.data(), (int)edge.size(), colour, ImDrawFlags_Closed, 0.8f);
 }
 
 void draw_recess(ImDrawList *draw, const Shape &shape, const RecessStyle &style, float u, Mask mask = Mask(),
@@ -554,13 +566,9 @@ float bezel_brightness(float x, const ImVec2 &lcd_min, const ImVec2 &lcd_max, fl
     return profile[count - 1][1];
 }
 
-void shade_body(ImDrawList *draw, ImVec2 device_min, ImVec2 device_max, float rounding, const ImVec2 &lcd_min,
-                const ImVec2 &lcd_max, float u) {
-    Shape body;
-    add_arc(body, ImVec2(device_max.x - rounding, device_min.y + rounding), rounding, IM_PI * 1.5f, IM_PI * 2.0f, 16);
-    add_arc(body, ImVec2(device_max.x - rounding, device_max.y - rounding), rounding, 0, IM_PI * 0.5f, 16);
-    add_arc(body, ImVec2(device_min.x + rounding, device_max.y - rounding), rounding, IM_PI * 0.5f, IM_PI, 16);
-    add_arc(body, ImVec2(device_min.x + rounding, device_min.y + rounding), rounding, IM_PI, IM_PI * 1.5f, 16);
+void shade_body(ImDrawList *draw, const Shape &body, const ImVec2 &lcd_min, const ImVec2 &lcd_max, float u) {
+    ImRect box = bounds(body);
+    ImVec2 device_min = box.Min, device_max = box.Max;
     int columns = std::max(16, (int)((device_max.x - device_min.x) / 3));
     draw->PrimReserve(columns * 12, (columns + 1) * 3);
     ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
@@ -724,9 +732,11 @@ std::vector<Shape> lid_regions(const Frame &frame, const LidShape &shape, ImVec2
 }
 
 Shape lid_shape(const Frame &frame, const LidShape &shape) {
-    Shape polygon = lid_regions(frame, shape)[0];
-    if (signed_area(polygon) < 0) std::reverse(polygon.begin(), polygon.end());
-    return polygon;
+    return lid_regions(frame, shape)[0];
+}
+
+std::vector<int> lid_indices(const LidShape &shape) {
+    return std::vector<int>(shape.indices, shape.indices + shape.index_count);
 }
 
 bool point_in(const Shape &polygon, ImVec2 point) {
@@ -916,15 +926,9 @@ void paint_lid_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImV
     centred_text(draw, lid.enter_centre + dip(down[LID_ENTER]), 16.0f * u, LABEL, "ENTER");
 }
 
-const float HINGE = 30.0f;
-const float KB_WIDTH_RATIO = 1.0f;
-const float KB_PAD_X = 16.0f;
 const float KEY_TRAVEL = 2.6f;
 const float KEY_SHOULDER = 4.0f;
 const float KB_SQUARE_CORNER = 0.22f;
-const float KB_PAD_TOP = 12.0f;
-const float KB_PAD_BOTTOM = 10.0f;
-const float KB_BOTTOM_MARGIN = 6.0f;
 const ImU32 KB_RING = IM_COL32(96, 84, 156, 255);
 const ImU32 KB_HIGHLIGHT = IM_COL32(236, 240, 242, 255);
 
@@ -996,15 +1000,6 @@ void label_on_baseline(ImDrawList *draw, ImFont *font, float size, const char *t
     glyph_middle(font, size, 'H', &bottom);
     float width = stretched_width(font, size, text, stretch);
     stretched_text(draw, font, size, text, cx - width * 0.5f, baseline - bottom, colour, stretch);
-}
-
-Shape rounded_box(ImVec2 a, ImVec2 b, float top_radius, float bottom_radius) {
-    Shape shape;
-    add_arc(shape, ImVec2(b.x - top_radius, a.y + top_radius), top_radius, -IM_PI * 0.5f, 0, 16);
-    add_arc(shape, ImVec2(b.x - bottom_radius, b.y - bottom_radius), bottom_radius, 0, IM_PI * 0.5f, 16);
-    add_arc(shape, ImVec2(a.x + bottom_radius, b.y - bottom_radius), bottom_radius, IM_PI * 0.5f, IM_PI, 16);
-    add_arc(shape, ImVec2(a.x + top_radius, a.y + top_radius), top_radius, IM_PI, IM_PI * 1.5f, 16);
-    return shape;
 }
 
 void cubic(Shape &shape, ImVec2 p0, ImVec2 p1, ImVec2 p2, ImVec2 p3, int steps) {
@@ -1245,16 +1240,99 @@ void keyboard_secondary(ImDrawList *draw, const KeyboardFrame &frame, const Keyb
     label_on_baseline(draw, font, size, text, cx, baseline, colour, KB_LEGEND_STRETCH);
 }
 
-void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, bool wear) {
-    float k = frame.kbu;
-    float left = -KB_PAD_X, top = -KB_PAD_TOP, right = KB_WIDTH + KB_PAD_X, bottom_edge = KB_HEIGHT + KB_PAD_BOTTOM;
-    Shape body = rounded_box(frame.at(left - 3, top - 3), frame.at(right + 3, bottom_edge + KB_FRONT_DEPTH), (KB_TOP_RADIUS + 3) * k, (KB_BOTTOM_RADIUS + 4) * k);
-    fill(draw, translated(body, ImVec2(0, 4 * k)), IM_COL32(0, 0, 0, 80), IM_COL32(0, 0, 0, 120));
-    fill(draw, body, KB_FRONT_TOP, KB_FRONT_BOTTOM);
+ImU32 scaled_colour(ImU32 colour, float k, float sheen = 0.0f) {
+    int r = (colour >> IM_COL32_R_SHIFT) & 0xff, g = (colour >> IM_COL32_G_SHIFT) & 0xff, b = (colour >> IM_COL32_B_SHIFT) & 0xff;
+    auto channel = [&](int c) { return std::min(255, (int)(c * k + (255 - c * k) * sheen)); };
+    return IM_COL32(channel(r), channel(g), channel(b), 255);
+}
 
-    Shape face = rounded_box(frame.at(left, top), frame.at(right, bottom_edge), KB_TOP_RADIUS * k, KB_BOTTOM_RADIUS * k);
+ImU32 tube_colour(float t, ImU32 base, ImU32 top_colour, ImU32 bottom_colour) {
+    float angle = (t - 0.5f) * IM_PI;
+    float light = cosf(angle + 0.55f);
+    float shade = 0.58f + 0.46f * std::max(0.0f, light);
+    float sheen = 0.32f * powf(std::max(0.0f, cosf(angle + 0.7f)), 18.0f);
+    ImU32 colour = scaled_colour(base, shade, sheen);
+    if (t < 0.12f) colour = mix(top_colour, colour, t / 0.12f);
+    if (t > 0.9f) colour = mix(colour, bottom_colour, (t - 0.9f) / 0.1f);
+    return colour;
+}
+
+Shape clip_band(const Shape &polygon, float y0, float y1) {
+    Shape shape = polygon;
+    for (int side = 0; side < 2 && !shape.empty(); side++) {
+        Shape out;
+        float limit = side == 0 ? y0 : y1;
+        auto inside = [&](ImVec2 p) { return side == 0 ? p.y >= limit : p.y <= limit; };
+        for (size_t i = 0; i < shape.size(); i++) {
+            ImVec2 a = shape[i], b = shape[(i + 1) % shape.size()];
+            if (inside(a)) out.push_back(a);
+            if (inside(a) != inside(b)) out.push_back(a + (b - a) * ((limit - a.y) / (b.y - a.y)));
+        }
+        shape = out;
+    }
+    return shape;
+}
+
+void tube(ImDrawList *draw, const Shape &shape, const std::vector<int> &indices, float y0, float y1, ImU32 base, ImU32 top_colour, ImU32 bottom_colour,
+          float until = FLT_MAX) {
+    const int bands = 24;
+    std::vector<int> triangles = indices.empty() ? ear_clip(shape) : indices;
+    ImVec2 uv = draw->_Data->TexUvWhitePixel;
+    auto colour_at = [&](float y) { return tube_colour(std::max(0.0f, std::min(1.0f, (y - y0) / (y1 - y0))), base, top_colour, bottom_colour); };
+    for (size_t t = 0; t + 2 < triangles.size(); t += 3) {
+        Shape triangle = { shape[triangles[t]], shape[triangles[t + 1]], shape[triangles[t + 2]] };
+        for (int band = -1; band <= bands; band++) {
+            float a = band < 0 ? -FLT_MAX : y0 + (y1 - y0) * band / bands;
+            float b = band == bands ? FLT_MAX : y0 + (y1 - y0) * (band + 1) / bands;
+            b = std::min(b, until);
+            if (a >= b) continue;
+            Shape piece = clip_band(triangle, a, b);
+            if (piece.size() < 3) continue;
+            draw->PrimReserve((int)(piece.size() - 2) * 3, (int)piece.size());
+            ImDrawIdx base_index = (ImDrawIdx)draw->_VtxCurrentIdx;
+            for (const ImVec2 &point : piece) draw->PrimWriteVtx(point, uv, colour_at(point.y));
+            for (size_t k = 1; k + 1 < piece.size(); k++) {
+                draw->PrimWriteIdx(base_index);
+                draw->PrimWriteIdx((ImDrawIdx)(base_index + k));
+                draw->PrimWriteIdx((ImDrawIdx)(base_index + k + 1));
+            }
+        }
+    }
+}
+
+void cap_shade(ImDrawList *draw, const Shape &shape, const std::vector<int> &indices, bool left, float width) {
+    ImRect box = bounds(shape);
+    int start = draw->VtxBuffer.Size;
+    fill_polygon(draw, shape, IM_COL32_WHITE, indices);
+    float edge = left ? box.Min.x : box.Max.x;
+    for (int i = start; i < draw->VtxBuffer.Size; i++) {
+        float t = std::min(1.0f, fabsf(draw->VtxBuffer[i].pos.x - edge) / width);
+        draw->VtxBuffer[i].col = IM_COL32(24, 28, 34, (int)(110 * (1.0f - t) * (1.0f - t)));
+    }
+}
+
+void draw_groove(ImDrawList *draw, const Shape &face, float from_x, float to_x, float below_y, float k) {
+    Shape edge;
+    ImRect box = bounds(face);
+    for (const ImVec2 &point : face) {
+        if (point.x > from_x && point.x < to_x && point.y < below_y && point.y < box.GetCenter().y) edge.push_back(point);
+    }
+    std::sort(edge.begin(), edge.end(), [](ImVec2 a, ImVec2 b) { return a.x < b.x; });
+    if (edge.size() < 2) return;
+    Shape shadow = translated(edge, ImVec2(0, -1.2f * k));
+    draw->AddPolyline(shadow.data(), (int)shadow.size(), IM_COL32(30, 34, 40, 170), 0, 1.6f * k);
+    Shape light = translated(edge, ImVec2(0, 0.6f * k));
+    draw->AddPolyline(light.data(), (int)light.size(), IM_COL32(246, 250, 252, 220), 0, 1.0f * k);
+}
+
+void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face, ImRect hinge, float hinge_top, bool compact, bool wear) {
+    float k = frame.kbu;
+    Shape front = translated(face, ImVec2(0, KB_FRONT_DEPTH * k));
+    fill(draw, translated(front, ImVec2(0, 4 * k)), IM_COL32(0, 0, 0, 80), IM_COL32(0, 0, 0, 120));
+    fill(draw, front, KB_FRONT_TOP, KB_FRONT_BOTTOM);
+    ImRect face_box = bounds(face);
     Shape seam;
-    float bottom = frame.at(0, bottom_edge).y;
+    float bottom = face_box.Max.y;
     for (const ImVec2 &point : face) {
         if (point.y > bottom - KB_BOTTOM_RADIUS * k - 0.01f) seam.push_back(point + ImVec2(0, KB_FRONT_SEAM * k));
     }
@@ -1263,9 +1341,16 @@ void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, bool wear) {
     Shape seam_light = translated(seam, ImVec2(0, 0.8f * k));
     draw->AddPolyline(seam_light.data(), (int)seam_light.size(), faded(KB_SEAM_LIGHT, 0.6f), 0, 0.6f * k);
 
-    fill(draw, face, lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(152, 163, 171, 255), 0.35f));
+    {
+        std::vector<int> indices = lid_indices(LID_SHAPE_KEYBOARD_BODY);
+        int start = draw->VtxBuffer.Size;
+        fill_polygon(draw, face, IM_COL32_WHITE, indices);
+        ImGui::ShadeVertsLinearColorGradientKeepAlpha(draw, start, draw->VtxBuffer.Size, ImVec2(0, face_box.Min.y), ImVec2(0, face_box.Max.y),
+                                                      lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(152, 163, 171, 255), 0.35f));
+        if (hinge.GetWidth() > 0) tube(draw, face, indices, hinge_top, hinge.Max.y, KB_KEYBED, scaled_colour(KB_KEYBED, 0.6f), lighten(KB_KEYBED, 10), hinge.Max.y);
+    }
     if (grime_texture) {
-        ImRect box = bounds(face);
+        ImRect box = face_box;
         draw->AddImageRounded((ImTextureID)(intptr_t)grime_texture, box.Min, box.Max, ImVec2(0, 0), ImVec2(1, 1),
                               IM_COL32_WHITE, KB_TOP_RADIUS * k);
         if (wear) case_scratches(draw, box.Min, box.Max, KB_TOP_RADIUS * k, 0.45f);
@@ -1287,7 +1372,9 @@ void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, bool wear) {
         return faded(colour, 1.0f - smoothstep((t - 0.7f) / 0.3f));
     });
 
-    float finger_y = KB_FINGER_Y - KB_HEIGHT + bottom_edge;
+    if (compact) draw_groove(draw, face, face_box.Min.x - 1, face_box.Max.x + 1, face_box.Min.y + 1.0f, k);
+    else if (hinge.GetWidth() > 0) draw_groove(draw, face, hinge.Min.x, hinge.Max.x, hinge.Max.y, k);
+    float finger_y = (face_box.Max.y - frame.origin.y) / k + KB_FINGER_Y - KB_HEIGHT;
     draw_recess(draw, pill(frame.at(KB_FINGER_X - KB_FINGER_W * 0.5f, finger_y - KB_FINGER_H * 0.5f),
                            frame.at(KB_FINGER_X + KB_FINGER_W * 0.5f, finger_y + KB_FINGER_H * 0.5f)),
                 SCOOP_RECESS, k, Mask(), FINGER_SCOOP);
@@ -1351,9 +1438,10 @@ void draw_key_hole(ImDrawList *draw, const Shape &hole, float k) {
     }
 }
 
-void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const DeviceState &state, const uint8_t *down) {
+void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face, ImRect hinge, float hinge_top, bool compact, float u, const DeviceState &state,
+                    const uint8_t *down) {
     float k = frame.kbu;
-    draw_keybed(draw, frame, state.wear);
+    draw_keybed(draw, frame, face, hinge, hinge_top, compact, state.wear);
     for (const KeyboardKey &key : keyboard_keys) {
         if (!key.ring) continue;
         Shape ring = outset(keyboard_key_shape(frame, key), 1.6f * u + 4.6f * k + 0.75f * k);
@@ -1444,48 +1532,96 @@ void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const
 
 }
 
-float lid_width_units() {
-    return LEFT_EXTENT + RIGHT_EXTENT + REFERENCE_LCD_H * GRID_W / GRID_H;
-}
-
-float keyboard_unit_in_lid_units() {
-    return lid_width_units() * KB_WIDTH_RATIO / (KB_WIDTH + 2 * KB_PAD_X);
-}
-
-float keyboard_height_in_lid_units() {
-    return HINGE + (KB_PAD_TOP + KB_HEIGHT + KB_PAD_BOTTOM + KB_FRONT_DEPTH + KB_BOTTOM_MARGIN) * keyboard_unit_in_lid_units();
-}
-
-void draw_hinge(ImDrawList *draw, ImVec2 device_min, ImVec2 device_max, float u) {
-    float width = (device_max.x - device_min.x) * 0.9f;
-    float centre = (device_min.x + device_max.x) * 0.5f;
-    ImVec2 a(centre - width * 0.5f, device_max.y - 14 * u), b(centre + width * 0.5f, device_max.y + HINGE * u + 10 * u);
-    Shape barrel = pill(a, b);
-    fill(draw, translated(barrel, ImVec2(0, 3 * u)), IM_COL32(0, 0, 0, 70), IM_COL32(0, 0, 0, 70));
-    fill(draw, barrel, IM_COL32(150, 158, 164, 255), IM_COL32(96, 104, 110, 255));
-    Shape shine = pill(ImVec2(a.x + 20 * u, device_max.y + 2 * u), ImVec2(b.x - 20 * u, device_max.y + 10 * u));
-    fill(draw, shine, IM_COL32(220, 226, 230, 90), IM_COL32(220, 226, 230, 0));
-}
-
-
 struct DeviceLayout {
     ImVec2 device_min, device_max, image_min, image_max;
     float u;
     float rounding;
     bool has_keyboard;
+    bool compact;
 };
+
+float keyboard_scale() {
+    return LID_UNITS_PER_MM / KB_UNITS_PER_MM;
+}
+
+float lid_bottom_units() {
+    return REFERENCE_LCD_H + LID_BOTTOM_EXTENT;
+}
+
+float keyboard_extra_units(bool compact) {
+    return LID_KEYBOARD_BOTTOM + KB_FRONT_DEPTH * keyboard_scale() - lid_bottom_units() - (compact ? LID_COMPACT_SHIFT : 0.0f);
+}
+
+void square_corners(Shape &shape, bool top, float y_edge, float reach) {
+    ImRect box = bounds(shape);
+    for (ImVec2 &point : shape) {
+        bool in_band = top ? point.y < y_edge + reach : point.y > y_edge - reach;
+        if (!in_band) continue;
+        if (point.x < box.Min.x + reach) point.x = box.Min.x;
+        if (point.x > box.Max.x - reach) point.x = box.Max.x;
+        if (top) point.y = std::max(point.y, y_edge);
+    }
+}
+
+Shape lid_body(const DeviceLayout &layout) {
+    Shape body = lid_shape(Frame{ layout.image_min, layout.image_max, layout.u }, LID_SHAPE_BODY);
+    if (layout.compact) square_corners(body, false, bounds(body).Max.y, LID_BODY_RADIUS * layout.u);
+    return body;
+}
+
+Shape keyboard_body(const DeviceLayout &layout) {
+    Shape body = lid_shape(Frame{ layout.image_min, layout.image_max, layout.u }, LID_SHAPE_KEYBOARD_BODY);
+    if (!layout.compact) return body;
+    float lift = LID_COMPACT_SHIFT * layout.u;
+    for (ImVec2 &point : body) point.y -= lift;
+    square_corners(body, true, layout.device_max.y, LID_BODY_RADIUS * layout.u);
+    return body;
+}
+
+void hinge_span(const DeviceLayout &layout, Shape &left, Shape &right, Shape &middle, ImRect &span) {
+    Frame frame{ layout.image_min, layout.image_max, layout.u };
+    left = lid_shape(frame, LID_SHAPE_HINGE_LEFT);
+    right = lid_shape(frame, LID_SHAPE_HINGE_RIGHT);
+    middle = lid_shape(frame, LID_SHAPE_KEYBOARD_HINGE);
+    span = bounds(left);
+    span.Add(bounds(right));
+    span.Add(bounds(middle));
+}
+
+void draw_hinge_barrel(ImDrawList *draw, const DeviceLayout &layout) {
+    Shape left, right, middle;
+    ImRect span;
+    hinge_span(layout, left, right, middle, span);
+    fill(draw, translated(middle, ImVec2(0, 3 * layout.u)), IM_COL32(0, 0, 0, 60), IM_COL32(0, 0, 0, 90));
+    ImU32 face = lighten(KB_KEYBED, 10);
+    tube(draw, middle, lid_indices(LID_SHAPE_KEYBOARD_HINGE), span.Min.y, span.Max.y, KB_KEYBED, scaled_colour(KB_KEYBED, 0.6f), face);
+}
+
+void draw_hinge_caps(ImDrawList *draw, const DeviceLayout &layout, ImU32 lid_bottom) {
+    Shape left, right, middle;
+    ImRect span;
+    hinge_span(layout, left, right, middle, span);
+    float cap = bounds(left).GetWidth() * 0.45f;
+    for (int side = 0; side < 2; side++) {
+        const Shape &shape = side == 0 ? left : right;
+        std::vector<int> indices = lid_indices(side == 0 ? LID_SHAPE_HINGE_LEFT : LID_SHAPE_HINGE_RIGHT);
+        tube(draw, shape, indices, span.Min.y, span.Max.y, BEZEL, lid_bottom, scaled_colour(BEZEL, 0.52f));
+        cap_shade(draw, shape, indices, side == 0, cap);
+    }
+}
+
 
 struct BakeKey {
     ImVec2 origin, size;
     float scale;
-    bool show_keys, has_keyboard, wear, focused;
+    bool show_keys, has_keyboard, wear, focused, compact;
     std::vector<uint8_t> down;
     std::string model;
 
     bool operator==(const BakeKey &other) const {
         return origin.x == other.origin.x && origin.y == other.origin.y && size.x == other.size.x && size.y == other.size.y &&
                scale == other.scale && show_keys == other.show_keys && has_keyboard == other.has_keyboard && wear == other.wear &&
-               focused == other.focused && down == other.down && model == other.model;
+               focused == other.focused && compact == other.compact && down == other.down && model == other.model;
     }
 };
 
@@ -1497,22 +1633,25 @@ ImVec2 bake_min, bake_size;
 float bake_scale = 1.0f;
 
 KeyboardFrame keyboard_frame(const DeviceLayout &layout) {
-    float kbu = keyboard_unit_in_lid_units() * layout.u;
-    ImVec2 origin((layout.device_min.x + layout.device_max.x) * 0.5f - KB_WIDTH * kbu * 0.5f, layout.device_max.y + HINGE * layout.u + KB_PAD_TOP * kbu);
-    return KeyboardFrame{ origin, kbu };
+    Frame lid{ layout.image_min, layout.image_max, layout.u };
+    ImVec2 origin = lid.lid((KB_MM_ORIGIN_X - LID_GLASS_MM_X) * LID_UNITS_PER_MM, (KB_MM_ORIGIN_Y - LID_GLASS_MM_Y) * LID_UNITS_PER_MM);
+    if (layout.compact) origin.y -= LID_COMPACT_SHIFT * layout.u;
+    return KeyboardFrame{ origin, layout.u * keyboard_scale() };
 }
 
 void record_case(const DeviceLayout &layout) {
     case_regions.push_back({ ImRect(layout.device_min, layout.device_max), layout.rounding });
     if (!layout.has_keyboard) return;
-    float u = layout.u;
-    float width = (layout.device_max.x - layout.device_min.x) * 0.9f;
-    float centre = (layout.device_min.x + layout.device_max.x) * 0.5f;
-    ImRect hinge(centre - width * 0.5f, layout.device_max.y - 14 * u, centre + width * 0.5f, layout.device_max.y + HINGE * u + 10 * u);
-    case_regions.push_back({ hinge, hinge.GetHeight() * 0.5f });
-    KeyboardFrame frame = keyboard_frame(layout);
-    ImRect keyboard(frame.at(-KB_PAD_X - 3, -KB_PAD_TOP - 3), frame.at(KB_WIDTH + KB_PAD_X + 3, KB_HEIGHT + KB_PAD_BOTTOM + KB_FRONT_DEPTH));
-    case_regions.push_back({ keyboard, (KB_TOP_RADIUS + 3) * frame.kbu });
+    Frame frame{ layout.image_min, layout.image_max, layout.u };
+    if (!layout.compact) {
+        ImRect hinge = bounds(lid_shape(frame, LID_SHAPE_KEYBOARD_HINGE));
+        hinge.Add(bounds(lid_shape(frame, LID_SHAPE_HINGE_LEFT)));
+        hinge.Add(bounds(lid_shape(frame, LID_SHAPE_HINGE_RIGHT)));
+        case_regions.push_back({ hinge, hinge.GetHeight() * 0.5f });
+    }
+    ImRect keyboard = bounds(keyboard_body(layout));
+    keyboard.Max.y += KB_FRONT_DEPTH * keyboard_frame(layout).kbu;
+    case_regions.push_back({ keyboard, (KB_TOP_RADIUS + 3) * keyboard_frame(layout).kbu });
 }
 
 void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_scale, const DeviceLayout &layout, const DeviceState &state,
@@ -1520,13 +1659,18 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     ImVec2 device_min = layout.device_min, device_max = layout.device_max, image_min = layout.image_min, image_max = layout.image_max;
     ImVec2 device_size = device_max - device_min;
     float u = layout.u, rounding = layout.rounding;
-    if (layout.has_keyboard) draw_hinge(draw, device_min, device_max, u);
+    if (layout.has_keyboard && !layout.compact) draw_hinge_barrel(draw, layout);
+    Shape body = state.show_keys ? lid_body(layout) : Shape();
     if (state.focused && !state.borderless) {
         draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
     }
-    draw->AddRectFilled(device_min + ImVec2(0, 4), device_max + ImVec2(0, 4), IM_COL32(0, 0, 0, 90), rounding);
-    if (state.show_keys) shade_body(draw, device_min, device_max, rounding, image_min, image_max, u);
-    else draw->AddRectFilled(device_min, device_max, BEZEL, rounding);
+    if (state.show_keys) {
+        fill(draw, translated(body, ImVec2(0, 4)), IM_COL32(0, 0, 0, 90), IM_COL32(0, 0, 0, 90));
+        shade_body(draw, body, image_min, image_max, u);
+    } else {
+        draw->AddRectFilled(device_min + ImVec2(0, 4), device_max + ImVec2(0, 4), IM_COL32(0, 0, 0, 90), rounding);
+        draw->AddRectFilled(device_min, device_max, BEZEL, rounding);
+    }
     build_grime(renderer, (int)(device_size.x * framebuffer_scale), (int)(device_size.y * framebuffer_scale), framebuffer_scale * u, state.wear);
     wear_labels = state.wear;
     wear_grime = state.wear;
@@ -1536,8 +1680,15 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     if (state.wear) case_scratches(draw, device_min, device_max, rounding, 0.0f);
     if (!state.show_keys) draw->AddRectFilledMultiColor(device_min + ImVec2(rounding, 2), ImVec2(device_max.x - rounding, device_min.y + device_size.y * 0.45f),
                                   IM_COL32(255, 255, 255, 40), IM_COL32(255, 255, 255, 40), IM_COL32(255, 255, 255, 0), IM_COL32(255, 255, 255, 0));
-    draw->AddRect(device_min, device_max, BEZEL_EDGE, rounding, 0, 2.0f);
-    draw->AddRect(device_min + ImVec2(2, 2), device_max - ImVec2(2, 2), BEZEL_LIGHT, rounding - 2, 0, 1.0f);
+    if (state.show_keys) {
+        draw->AddPolyline(body.data(), (int)body.size(), BEZEL_EDGE, ImDrawFlags_Closed, 2.0f);
+        Shape inner = inset(body, 2.0f);
+        draw->AddPolyline(inner.data(), (int)inner.size(), BEZEL_LIGHT, ImDrawFlags_Closed, 1.0f);
+        if (layout.has_keyboard && !layout.compact) draw_hinge_caps(draw, layout, scaled_colour(BEZEL, 0.9f));
+    } else {
+        draw->AddRect(device_min, device_max, BEZEL_EDGE, rounding, 0, 2.0f);
+        draw->AddRect(device_min + ImVec2(2, 2), device_max - ImVec2(2, 2), BEZEL_LIGHT, rounding - 2, 0, 1.0f);
+    }
 
     if (state.show_keys) {
         Frame lid_frame{ image_min, image_max, u };
@@ -1556,7 +1707,19 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
         wear_patch(draw, at, at + text_size(text_font(), brand, "SHAM"), 1);
         draw->AddText(ImGui::GetFont(), 17.0f * u, at + ImVec2(text_size(text_font(), brand, "SHAM").x + 18 * u, 5 * u), PRINT, model_name.c_str());
         paint_lid_keys(draw, Frame{ image_min, image_max, u }, device_min, device_max, down);
-        if (layout.has_keyboard) paint_keyboard(draw, keyboard_frame(layout), u, state, down + LID_KEY_COUNT);
+        if (layout.has_keyboard) {
+            Frame frame{ image_min, image_max, u };
+            ImRect hinge = layout.compact ? ImRect() : bounds(lid_shape(frame, LID_SHAPE_KEYBOARD_HINGE));
+            float hinge_top = hinge.Min.y;
+            if (!layout.compact) {
+                Shape left, right, middle;
+                ImRect span;
+                hinge_span(layout, left, right, middle, span);
+                hinge = ImRect(hinge.Min.x, span.Min.y, hinge.Max.x, span.Max.y);
+                hinge_top = span.Min.y;
+            }
+            paint_keyboard(draw, keyboard_frame(layout), keyboard_body(layout), hinge, hinge_top, layout.compact, u, state, down + LID_KEY_COUNT);
+        }
     } else {
         draw->AddText(device_min + ImVec2(PLAIN_BEZEL, 8), IM_COL32(60, 66, 72, 255), ("SHAM  " + model_name).c_str());
     }
@@ -1567,7 +1730,7 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
 }
 
 static float extra_lid_units(const DeviceState &state) {
-    return state.show_keys && state.show_keyboard ? keyboard_height_in_lid_units() : 0.0f;
+    return state.show_keys && state.show_keyboard ? keyboard_extra_units(state.touch) : 0.0f;
 }
 
 int device_fit_cell(ImVec2 content, float framebuffer_scale, const DeviceState &state) {
@@ -1640,7 +1803,7 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
     ImVec2 image_max = image_min + image_size;
     float rounding = state.show_keys ? 34.0f * u : 18.0f;
 
-    DeviceLayout layout = { device_min, device_max, image_min, image_max, u, rounding, has_keyboard };
+    DeviceLayout layout = { device_min, device_max, image_min, image_max, u, rounding, has_keyboard, has_keyboard && state.touch };
     record_case(layout);
     ImGui::SetCursorScreenPos(image_min);
     ImGui::InvisibleButton("device", image_size);
@@ -1650,7 +1813,7 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
         if (has_keyboard) input_keyboard(keyboard_frame(layout), state, down.data() + LID_KEY_COUNT);
     }
 
-    BakeKey key = { origin, ImVec2(avail_w, height), framebuffer_scale, state.show_keys, has_keyboard, state.wear, ring, down, model_name };
+    BakeKey key = { origin, ImVec2(avail_w, height), framebuffer_scale, state.show_keys, has_keyboard, state.wear, ring, layout.compact, down, model_name };
     ImDrawList *draw = ImGui::GetWindowDrawList();
     if (bake_texture && !bake_pending && key == baked) {
         draw->AddImage((ImTextureID)(intptr_t)bake_texture, bake_min, bake_min + ImVec2((float)bake_texture->w, (float)bake_texture->h) / bake_scale);
