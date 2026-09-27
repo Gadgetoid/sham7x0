@@ -295,7 +295,7 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
     float radius = std::max(0.0f, layer.radius * place.scale);
     outline = smoothed(outline, std::max(1.5f, radius / 8.0f));
     ImRect edges(place.pixel_x(layer.edges.Min.x), place.pixel_y(layer.edges.Min.y), place.pixel_x(layer.edges.Max.x), place.pixel_y(layer.edges.Max.y));
-    bool full_edges = layer.kind != CASE_GROOVE;
+    bool full_edges = layer.kind != CASE_GROOVE && layer.kind != CASE_DISH;
     ImRect everything(-FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX);
     bool cylinder = layer.kind == CASE_CYLINDER;
     float band = cylinder || layer.kind == CASE_RAISE ? 0.0f : radius;
@@ -346,6 +346,14 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
                     surface.relief[index] -= height * depth;
                     Colour under = unpack(surface.albedo[index]);
                     surface.albedo[index] = pack(blend(under, Colour{ 0, 0, 0 }, depth * layer.tint));
+                } else if (layer.kind == CASE_DISH) {
+                    if (distance <= 0 || surface.alpha[index] <= 0) continue;
+                    float t = radius > 0 ? distance / radius : 1.0f;
+                    if (t >= 1.0f) continue;
+                    float trough = sinf(IM_PI * t);
+                    float depth = trough * trough;
+                    if (layer.taper > 0) depth *= smoothstep((edges.Max.y - y - 0.5f) / (layer.taper * place.scale));
+                    surface.relief[index] -= height * depth;
                 } else if (layer.kind == CASE_RAISE) {
                     if (distance <= -1.5f || surface.alpha[index] <= 0 || axis_half <= 0) continue;
                     float logical_y = place.logical_y(y);

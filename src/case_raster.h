@@ -6,7 +6,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 
-enum CaseLayerKind { CASE_SOLID, CASE_CYLINDER, CASE_RECESS, CASE_GROOVE, CASE_RAISE };
+enum CaseLayerKind { CASE_SOLID, CASE_CYLINDER, CASE_RECESS, CASE_GROOVE, CASE_RAISE, CASE_DISH };
 
 enum CaseRecessShape { CASE_BOWL, CASE_TROUGH, CASE_SHARP };
 
