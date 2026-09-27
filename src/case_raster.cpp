@@ -165,6 +165,25 @@ void measure_edges(const std::vector<ImVec2> &outline, const ImRect &edges, Fiel
     });
 }
 
+void soften_across(Field &field, int reach) {
+    std::vector<float> column(field.height);
+    for (int x = 0; x < field.width; x++) {
+        for (int y = 0; y < field.height; y++) column[y] = field.across[(size_t)y * field.width + x];
+        for (int y = 0; y < field.height; y++) {
+            if (column[y] == FLT_MAX) continue;
+            float total = 0;
+            int samples = 0;
+            for (int offset = -reach; offset <= reach; offset++) {
+                int row = y + offset;
+                if (row < 0 || row >= field.height || column[row] == FLT_MAX) continue;
+                total += column[row];
+                samples++;
+            }
+            field.across[(size_t)y * field.width + x] = total / samples;
+        }
+    }
+}
+
 Field signed_field(const std::vector<ImVec2> &outline, const ImRect &edges, float band, const Surface &surface, const ImRect *ends = nullptr) {
     Field field;
     field.band = band;
@@ -176,6 +195,7 @@ Field signed_field(const std::vector<ImVec2> &outline, const ImRect &edges, floa
     field.height = std::max(0, std::min(surface.height, (int)ceilf(box.Max.y + band)) - field.top);
     field.distance.assign((size_t)field.width * field.height, -band);
     fill_inside(outline, ends, field);
+    if (ends) soften_across(field, 4);
     measure_edges(outline, edges, field);
     return field;
 }
@@ -222,6 +242,10 @@ float recess_profile(CaseRecessShape shape, float t) {
     return smoothstep(t);
 }
 
+float length_of(ImVec2 vector) {
+    return sqrtf(vector.x * vector.x + vector.y * vector.y);
+}
+
 float turning(ImVec2 before, ImVec2 at, ImVec2 after) {
     ImVec2 a = at - before, b = after - at;
     float lengths = sqrtf((a.x * a.x + a.y * a.y) * (b.x * b.x + b.y * b.y));
@@ -237,8 +261,9 @@ std::vector<ImVec2> smoothed(const std::vector<ImVec2> &outline, float spacing) 
         ImVec2 p0 = outline[(i + count - 1) % count], p1 = outline[i], p2 = outline[(i + 1) % count], p3 = outline[(i + 2) % count];
         result.push_back(p1);
         if (turning(p0, p1, p2) > gentle || turning(p1, p2, p3) > gentle) continue;
-        ImVec2 along = p2 - p1;
-        int pieces = (int)(sqrtf(along.x * along.x + along.y * along.y) / spacing);
+        float before = length_of(p1 - p0), length = length_of(p2 - p1), after = length_of(p3 - p2);
+        if (length > 3.0f * std::min(before, after) || length * 3.0f < std::max(before, after)) continue;
+        int pieces = (int)(length / spacing);
         for (int piece = 1; piece < pieces; piece++) {
             float t = (float)piece / pieces, t2 = t * t, t3 = t2 * t;
             result.push_back((p1 * 2.0f + (p2 - p0) * t + (p0 * 2.0f - p1 * 5.0f + p2 * 4.0f - p3) * t2 + (p1 * 3.0f - p0 - p2 * 3.0f + p3) * t3) * 0.5f);
