@@ -306,7 +306,8 @@ void apply_dish(const CaseLayer &layer, const Placement &place, Surface &surface
                 float spread = expf((nearest - top) / softness) + expf((nearest - left) / softness) + expf((nearest - right) / softness);
                 float distance = nearest - softness * logf(spread);
                 float t = clamp01(distance / band);
-                surface.relief[index] -= height * (1.0f - cosf(IM_PI * t)) * 0.5f;
+                float falling = 1.0f - t;
+                surface.relief[index] -= height * (1.0f - falling * falling * falling) * smoothstep(t / 0.15f);
             }
         }
     });
