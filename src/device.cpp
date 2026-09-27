@@ -1597,24 +1597,35 @@ void draw_hinge_barrel(ImDrawList *draw, const DeviceLayout &layout) {
     tube(draw, middle, lid_indices(LID_SHAPE_KEYBOARD_HINGE), span.Min.y, span.Max.y, KB_KEYBED, scaled_colour(KB_KEYBED, 0.6f), face);
 }
 
-void draw_hinge_caps(ImDrawList *draw, const DeviceLayout &layout, ImU32 lid_bottom) {
+Shape inner_edge(const Shape &cap, bool left) {
+    ImRect box = bounds(cap);
+    float threshold = box.Min.x + box.GetWidth() * 0.5f;
+    Shape edge;
+    for (const ImVec2 &point : cap) {
+        bool inner = left ? point.x > threshold : point.x < box.Max.x - box.GetWidth() * 0.5f;
+        if (inner && point.y > box.Min.y + 0.01f && point.y < box.Max.y - 0.01f) edge.push_back(point);
+    }
+    std::sort(edge.begin(), edge.end(), [](ImVec2 a, ImVec2 b) { return a.y < b.y; });
+    return edge;
+}
+
+void draw_hinge_caps(ImDrawList *draw, const DeviceLayout &layout) {
     Shape left, right, middle;
     ImRect span;
     hinge_span(layout, left, right, middle, span);
+    float u = layout.u;
     float cap = bounds(left).GetWidth() * 0.45f;
     for (int side = 0; side < 2; side++) {
-        const Shape &shape = side == 0 ? left : right;
+        Shape shape = translated(side == 0 ? left : right, ImVec2(0, -1.5f));
         std::vector<int> indices = lid_indices(side == 0 ? LID_SHAPE_HINGE_LEFT : LID_SHAPE_HINGE_RIGHT);
-        tube(draw, shape, indices, span.Min.y, span.Max.y, BEZEL, lid_bottom, scaled_colour(BEZEL, 0.52f));
+        float k = bezel_brightness(bounds(shape).GetCenter().x, layout.image_min, layout.image_max, u);
+        tube(draw, shape, indices, span.Min.y - 1.5f, span.Max.y, BEZEL, scaled_colour(BEZEL, k), scaled_colour(BEZEL, 0.52f));
         cap_shade(draw, shape, indices, side == 0, cap);
-    }
-    ImRect barrel = bounds(middle);
-    float u = layout.u;
-    for (float x : { barrel.Min.x, barrel.Max.x }) {
-        ImVec2 top(x, span.Min.y + 1.0f), bottom(x, span.Max.y - 1.0f);
-        draw->AddLine(top, bottom, IM_COL32(28, 32, 38, 200), 1.6f * u);
-        float light = x == barrel.Min.x ? -1.2f * u : 1.2f * u;
-        draw->AddLine(top + ImVec2(light, 0), bottom + ImVec2(light, 0), IM_COL32(236, 242, 246, 110), 0.8f * u);
+        Shape edge = inner_edge(side == 0 ? left : right, side == 0);
+        if (edge.size() < 2) continue;
+        draw->AddPolyline(edge.data(), (int)edge.size(), IM_COL32(28, 32, 38, 200), 0, 1.6f * u);
+        Shape light = translated(edge, ImVec2(side == 0 ? -1.2f * u : 1.2f * u, 0));
+        draw->AddPolyline(light.data(), (int)light.size(), IM_COL32(236, 242, 246, 110), 0, 0.8f * u);
     }
 }
 
@@ -1667,10 +1678,9 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     ImVec2 device_min = layout.device_min, device_max = layout.device_max, image_min = layout.image_min, image_max = layout.image_max;
     ImVec2 device_size = device_max - device_min;
     float u = layout.u, rounding = layout.rounding;
-    if (layout.has_keyboard && !layout.compact) {
-        draw_hinge_barrel(draw, layout);
-        draw_hinge_caps(draw, layout, scaled_colour(BEZEL, 0.9f));
-    }
+    Shape lid_outline = state.show_keys ? lid_body(layout) : Shape();
+    if (state.show_keys) fill(draw, translated(lid_outline, ImVec2(0, 4)), IM_COL32(0, 0, 0, 90), IM_COL32(0, 0, 0, 90));
+    if (layout.has_keyboard && !layout.compact) draw_hinge_barrel(draw, layout);
     Shape body = state.show_keys ? lid_body(layout) : Shape();
     if (state.focused && !state.borderless) {
         if (state.show_keys) {
@@ -1681,7 +1691,6 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
         }
     }
     if (state.show_keys) {
-        fill(draw, translated(body, ImVec2(0, 4)), IM_COL32(0, 0, 0, 90), IM_COL32(0, 0, 0, 90));
         shade_body(draw, body, image_min, image_max, u);
     } else {
         draw->AddRectFilled(device_min + ImVec2(0, 4), device_max + ImVec2(0, 4), IM_COL32(0, 0, 0, 90), rounding);
@@ -1700,6 +1709,7 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
         draw->AddPolyline(body.data(), (int)body.size(), BEZEL_EDGE, ImDrawFlags_Closed, 2.0f);
         Shape inner = inset(body, 2.0f);
         draw->AddPolyline(inner.data(), (int)inner.size(), BEZEL_LIGHT, ImDrawFlags_Closed, 1.0f);
+        if (layout.has_keyboard && !layout.compact) draw_hinge_caps(draw, layout);
     } else {
         draw->AddRect(device_min, device_max, BEZEL_EDGE, rounding, 0, 2.0f);
         draw->AddRect(device_min + ImVec2(2, 2), device_max - ImVec2(2, 2), BEZEL_LIGHT, rounding - 2, 0, 1.0f);
