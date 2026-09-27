@@ -15,10 +15,12 @@ jobs:
         run: brew install sdl3
       - name: Build
         run: make -k -j3 && make headless
-      - name: Build with Touchscreen Mode
-        run: make -j3 TOUCHSCREEN=1
+      - name: Smoke test
+        run: SDL_VIDEO_DRIVER=dummy ./sham7x0 --data=build/smoke --screenshot=build/smoke/screen.bmp --frames=5 && test -s build/smoke/screen.bmp
       - name: Test
         run: python3 tools/test.py
+      - name: Build with Touchscreen Mode
+        run: make -j3 TOUCHSCREEN=1
 
   linux:
     runs-on: ubuntu-latest
@@ -31,6 +33,8 @@ jobs:
           submodules: true
       - name: Build
         run: make -k -j4 && make headless
+      - name: Smoke test
+        run: SDL_VIDEO_DRIVER=dummy ./sham7x0 --data=build/smoke --screenshot=build/smoke/screen.bmp --frames=5 && test -s build/smoke/screen.bmp
       - name: Test
         run: python3 tools/test.py
 
@@ -55,5 +59,9 @@ jobs:
           submodules: true
       - name: Build
         run: make -k -j4 && make headless
+      - name: Rebuild is a no-op
+        run: make -q
+      - name: Smoke test
+        run: SDL_VIDEO_DRIVER=dummy ./sham7x0 --data=build/smoke --screenshot=build/smoke/screen.bmp --frames=5 && test -s build/smoke/screen.bmp
       - name: Test
         run: python3 tools/test.py

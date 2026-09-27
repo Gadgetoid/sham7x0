@@ -51,6 +51,11 @@ static const SDL_Keymod SHORTCUT_MODIFIER = SDL_KMOD_ALT;
 static const char *const SHORTCUT_NAME = "Alt";
 #endif
 
+static bool typing_modifiers(SDL_Keymod mod) {
+    bool altgr = (mod & SDL_KMOD_CTRL) && (mod & SDL_KMOD_RALT);
+    return altgr || !(mod & (SDL_KMOD_CTRL | SHORTCUT_MODIFIER));
+}
+
 static uint64_t start_ticks = 0;
 static std::mutex install_lock;
 static std::vector<std::string> pending_installs;
@@ -996,7 +1001,7 @@ int main(int argc, char **argv) {
             }
             if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST) keys_release_all();
             if (event.type == SDL_EVENT_TEXT_INPUT && event.text.windowID == main_window_id && device_focused && device.powered) {
-                if (!(SDL_GetModState() & (SDL_KMOD_CTRL | SHORTCUT_MODIFIER))) push_text(event.text.text);
+                if (typing_modifiers(SDL_GetModState())) push_text(event.text.text);
             }
         }
 

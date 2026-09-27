@@ -59,8 +59,11 @@ LDFLAGS += -framework IOKit
 SRC_APP += src/touch_macos.c
 endif
 
-CONFIG = build/config
-$(shell mkdir -p build; echo "TOUCHSCREEN=$(TOUCHSCREEN)" | cmp -s - $(CONFIG) || { echo "TOUCHSCREEN=$(TOUCHSCREEN)" > $(CONFIG); rm -f $(PROG); })
+CONFIG      = build/config
+CONFIG_TEXT = TOUCHSCREEN=$(TOUCHSCREEN)
+ifneq ($(CONFIG_TEXT),$(shell cat $(CONFIG) 2>/dev/null))
+$(shell mkdir -p build; echo "$(CONFIG_TEXT)" > $(CONFIG); rm -f $(PROG))
+endif
 
 SRC_APP_CXX = \
 	src/main.cpp \
