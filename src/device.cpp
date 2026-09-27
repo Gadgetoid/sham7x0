@@ -1264,7 +1264,7 @@ const float KB_SEAM_DEPTH = 0.8f;
 const float KB_FACE_RELIEF = 1.2f;
 const float KB_FACE_EDGE = 3.0f;
 const float ROLL_JOIN = 0.2f;
-const float ROLL_KEY_CLEARANCE = 14.0f;
+const float ROLL_KEY_CLEARANCE = 4.0f;
 const float ARCH_GROOVE_WIDTH = 6.0f;
 const float ARCH_GROOVE_DEPTH = 6.0f;
 const float ARCH_GROOVE_TAPER = 14.0f;
@@ -1346,8 +1346,6 @@ void add_hinge(CaseScene &scene, const DeviceLayout &layout) {
         ImRect box = bounds(*cap);
         CaseLayer end = barrel;
         end.outline = *cap;
-        end.top_colour = BEZEL;
-        end.bottom_colour = BEZEL;
         end.roll_end = 0;
         bool on_left = cap == &left;
         end.radius = CAP_END_ROUNDING * u;

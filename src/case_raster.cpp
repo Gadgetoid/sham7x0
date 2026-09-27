@@ -12,8 +12,8 @@ namespace {
 const float LIGHT_X = -0.32f;
 const float LIGHT_Y = -0.78f;
 const float LIGHT_Z = 1.0f;
-const float AMBIENT = 0.42f;
-const float DIFFUSE = 0.58f;
+const float AMBIENT = 0.55f;
+const float DIFFUSE = 0.45f;
 const float SPECULAR = 0.22f;
 const float SHININESS = 28.0f;
 const float DISTANCE_INFINITY = 1e20f;
