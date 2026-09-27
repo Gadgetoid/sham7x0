@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "imgui.h"
+#include "imgui_impl_sdl3.h"
+#include "imgui_impl_sdlrenderer3.h"
 #include "browser.h"
 #include "runtime.h"
 
@@ -54,6 +56,9 @@ bool focus_search = false;
 std::string install_status;
 int install_status_app = -1;
 std::map<std::string, SDL_Texture *> textures;
+SDL_Window *window = nullptr;
+SDL_Renderer *renderer = nullptr;
+ImGuiContext *context = nullptr;
 
 struct JsonReader {
     const char *position;
@@ -227,7 +232,7 @@ std::string app_path(const App &app, const std::string &file) {
     return apps_directory + "/" + app.directory + "/" + file;
 }
 
-SDL_Texture *screenshot_texture(SDL_Renderer *renderer, const App &app) {
+SDL_Texture *screenshot_texture(const App &app) {
     if (app.screenshot.empty()) return nullptr;
     std::string path = app_path(app, app.screenshot);
     auto found = textures.find(path);
@@ -250,10 +255,10 @@ void install(int index) {
     else install_status = app.program ? "Installed" : "Transfer finished, see console";
 }
 
-void draw_details(SDL_Renderer *renderer, int index) {
+void draw_details(int index) {
     const App &app = apps[index];
     float width = ImGui::GetContentRegionAvail().x;
-    if (SDL_Texture *texture = screenshot_texture(renderer, app)) {
+    if (SDL_Texture *texture = screenshot_texture(app)) {
         float texture_width = 0, texture_height = 0;
         SDL_GetTextureSize(texture, &texture_width, &texture_height);
         float image_width = std::min(width, texture_width);
@@ -292,38 +297,33 @@ void draw_details(SDL_Renderer *renderer, int index) {
     }
 }
 
-}
-
-void browser_set_directory(const char *apps) {
-    apps_directory = apps;
-    loaded = false;
-}
-
-void browser_toggle(void) {
-    visible = !visible;
-    if (visible) focus_search = true;
-}
-
-bool browser_visible(void) {
-    return visible;
-}
-
-bool browser_focused(void) {
-    return visible && focused;
-}
-
-void browser_draw(SDL_Renderer *renderer) {
-    focused = false;
-    if (!visible) return;
-    if (!loaded) load();
-    ImGui::SetNextWindowSize(ImVec2(900, 560), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-    if (!ImGui::Begin("Apps", &visible)) {
-        ImGui::End();
-        return;
+bool open_window() {
+    if (window) return true;
+    window = SDL_CreateWindow("Apps", 900, 560, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
+    renderer = window ? SDL_CreateRenderer(window, nullptr) : nullptr;
+    if (!renderer) {
+        SDL_Log("app browser window failed: %s", SDL_GetError());
+        if (window) SDL_DestroyWindow(window);
+        window = nullptr;
+        return false;
     }
-    focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+    ImGuiContext *previous = ImGui::GetCurrentContext();
+    context = ImGui::CreateContext();
+    ImGui::SetCurrentContext(context);
+    ImGuiIO &io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    ImGui::StyleColorsDark();
+    io.Fonts->AddFontDefault();
+    ImGuiStyle &style = ImGui::GetStyle();
+    style.FontSizeBase = 14.0f;
+    style.Colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.11f, 0.12f, 1.0f);
+    ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
+    ImGui_ImplSDLRenderer3_Init(renderer);
+    ImGui::SetCurrentContext(previous);
+    return true;
+}
 
+void draw_body() {
     std::vector<std::string> words = search_words();
     std::vector<int> shown;
     for (int i = 0; i < (int)apps.size(); i++) {
@@ -369,7 +369,6 @@ void browser_draw(SDL_Renderer *renderer) {
 
     if (apps.empty()) {
         ImGui::TextWrapped("No apps found. Expected %s/{programs,basic,memo,schedule}/index.json.", apps_directory.c_str());
-        ImGui::End();
         return;
     }
 
@@ -404,9 +403,77 @@ void browser_draw(SDL_Renderer *renderer) {
 
     ImGui::SameLine();
     ImGui::BeginChild("details");
-    if (selected >= 0 && selected < (int)apps.size()) draw_details(renderer, selected);
+    if (selected >= 0 && selected < (int)apps.size()) draw_details(selected);
     ImGui::EndChild();
+}
+
+void draw_contents() {
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
+    ImGui::Begin("Apps", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+    draw_body();
     ImGui::End();
+}
+
+}
+
+void browser_set_directory(const char *apps) {
+    apps_directory = apps;
+    loaded = false;
+}
+
+void browser_toggle(void) {
+    if (visible && browser_focused()) {
+        visible = false;
+        SDL_HideWindow(window);
+        return;
+    }
+    if (!open_window()) return;
+    visible = true;
+    focus_search = true;
+    SDL_ShowWindow(window);
+    SDL_RaiseWindow(window);
+}
+
+bool browser_visible(void) {
+    return visible;
+}
+
+bool browser_focused(void) {
+    return visible && window && SDL_GetKeyboardFocus() == window;
+}
+
+void browser_process_event(const SDL_Event *event) {
+    if (!context) return;
+    if (event->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event->window.windowID == SDL_GetWindowID(window)) {
+        visible = false;
+        SDL_HideWindow(window);
+        return;
+    }
+    ImGuiContext *previous = ImGui::GetCurrentContext();
+    ImGui::SetCurrentContext(context);
+    ImGui_ImplSDL3_ProcessEvent(event);
+    ImGui::SetCurrentContext(previous);
+}
+
+void browser_draw(void) {
+    if (!visible || !context) return;
+    if (!loaded) load();
+    ImGuiContext *previous = ImGui::GetCurrentContext();
+    ImGui::SetCurrentContext(context);
+    ImGui_ImplSDLRenderer3_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+    focused = browser_focused();
+    draw_contents();
+    ImGui::Render();
+    ImGuiIO &io = ImGui::GetIO();
+    SDL_SetRenderScale(renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
+    SDL_SetRenderDrawColor(renderer, 26, 28, 31, 255);
+    SDL_RenderClear(renderer);
+    ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+    SDL_RenderPresent(renderer);
+    ImGui::SetCurrentContext(previous);
 }
 
 void browser_shutdown(void) {
@@ -414,4 +481,16 @@ void browser_shutdown(void) {
         if (entry.second) SDL_DestroyTexture(entry.second);
     }
     textures.clear();
+    if (!context) return;
+    ImGuiContext *previous = ImGui::GetCurrentContext();
+    ImGui::SetCurrentContext(context);
+    ImGui_ImplSDLRenderer3_Shutdown();
+    ImGui_ImplSDL3_Shutdown();
+    ImGui::DestroyContext(context);
+    ImGui::SetCurrentContext(previous);
+    context = nullptr;
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    renderer = nullptr;
+    window = nullptr;
 }

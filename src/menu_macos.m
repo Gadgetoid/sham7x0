@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#import <QuartzCore/QuartzCore.h>
 
 #include "menu.h"
 #include "serial.h"
@@ -133,6 +134,7 @@ void menu_install(void) {
     for (int i = 0; i < MENU_LAYOUT_END - MENU_LAYOUT_FIRST; i++) add_item(view, MENU_LAYOUT_FIRST + i, layouts[i], @"", 0);
     add_item(view, MENU_LAYOUT_NEXT, @"Next Layout", @"k", NSEventModifierFlagCommand);
     [view addItem:[NSMenuItem separatorItem]];
+    add_item(view, MENU_BORDERLESS, @"Borderless", @"b", NSEventModifierFlagCommand | NSEventModifierFlagShift);
     add_item(view, MENU_TOUCHSCREEN, @"Touchscreen Mode", @"t", NSEventModifierFlagCommand | NSEventModifierFlagShift);
     [view addItem:[NSMenuItem separatorItem]];
     add_item(view, MENU_SHOW_CONSOLE, @"Show Console", @"j", NSEventModifierFlagCommand);
@@ -199,4 +201,21 @@ bool window_cover_display(void *handle, bool cover) {
         window.collectionBehavior = NSWindowCollectionBehaviorDefault;
     }
     return true;
+}
+
+void window_set_transparent(void *handle, void *layer_handle, bool transparent) {
+    NSWindow *window = (__bridge NSWindow *)handle;
+    CALayer *layer = (__bridge CALayer *)layer_handle;
+    if (!window) return;
+    window.opaque = !transparent;
+    window.backgroundColor = transparent ? NSColor.clearColor : NSColor.windowBackgroundColor;
+    window.hasShadow = !transparent;
+    layer.opaque = !transparent;
+}
+
+void window_set_aspect(void *handle, float width, float height) {
+    NSWindow *window = (__bridge NSWindow *)handle;
+    if (!window) return;
+    if (width > 0 && height > 0) window.contentAspectRatio = NSMakeSize(width, height);
+    else window.contentResizeIncrements = NSMakeSize(1, 1);
 }

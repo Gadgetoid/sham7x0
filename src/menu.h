@@ -29,6 +29,7 @@ enum {
     MENU_INSTALL_WZD,
     MENU_TEST_MODE,
     MENU_APP_BROWSER,
+    MENU_BORDERLESS,
     MENU_SERIAL_OFF,
     MENU_SERIAL_PTY,
     MENU_SERIAL_DEVICE_FIRST,
@@ -49,6 +50,8 @@ void menu_set_checked(int item, bool checked);
 void menu_set_serial(const char *target);
 const char *menu_serial_device(int item);
 void menu_set_firmware(const char *const *titles, int count, int current);
+void window_set_transparent(void *nswindow, void *layer, bool transparent);
+void window_set_aspect(void *nswindow, float width, float height);
 
 #ifdef __cplusplus
 }

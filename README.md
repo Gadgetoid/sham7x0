@@ -47,6 +47,10 @@ The machine state is saved to the firmware's state file on exit and every minute
 
 Clicked keyboard keys go straight to the key matrix, so Shift, 2nd and CAPS behave as the firmware decides. A clicked left Shift stays down until the next key. Host typing and the bezel keys are translated to matrix presses.
 
+The LCD draws at whole pixel scales, so the window snaps to the nearest size that fits the device, no smaller than the smallest scale. With the console shown, width sets the device size and height the console.
+
+View > Borderless (Cmd-Shift-B, `--borderless`) drops the window frame and background so only the device sits on the desktop, sized to the current layout. Drag it by the case, or by the LCD in Screen Only. The console is hidden while it's on; Show Console or Focus Console turns it off.
+
 ```
 ./sham7x0 --exec=init --keys="{WAIT}...{ENTER}"
 ./headless rom/r162.da1 --seconds=10 --keys=0:99.0/1.5,2:6.6/0.3 --pbm=out.pbm
@@ -75,7 +79,7 @@ Pressing PC SYNC makes the organizer send `WSYS START`. Sending memos is then `W
 
 The data stream is `"F","S1:MEMO.BOX"` (or `SCHEDUL1.BOX`, `ANNIV1.BOX`, `TODO.BOX`, `ADDRESS.BOX`, `EXPENSE.BOX`) and CRLF, then an `"IT",` item header and one `"D",` block per record. Each block is its tag, a 32-bit big-endian length of the rest and a trailing CRLF. `IT` holds a field count, then per field its type, 4-letter ID and name. `D` holds three words (0, the PC ID or FFFF for none, FF80), a 32-bit length, a field count, the field lengths and the fields. The memo box has `ATTR DATE TTL1 MEM1` and schedule `ATTR TIM1 TIM2 ALRM MEM1`. `ATTR` is one byte, `80` for not secret. Dates are year (16-bit), month, day, hour, minute and `FF FF`, with `FF` for no time. The title is padded to 20 characters and line breaks are CR. `WDAT RECEIVE MEMO.BOX` returns the same format.
 
-Install > App Browser (Cmd-Shift-I, `--menu=apps`) searches the `index.json` in each of those directories by title, description and category, shows the screenshot and installs the selected program, memo or schedule. Up/Down and Page Up/Down move the selection, Enter or a double-click installs. Each `index.json` is an array of objects with `file`, `original_file`, `title`, `data_type`, `category`, `description`, `alert`, `source_url` and `screenshot` (relative to the directory).
+Install > App Browser (Cmd-Shift-I, `--menu=apps`) opens a separate window that searches the `index.json` in each of those directories by title, description and category, shows the screenshot and installs the selected program, memo or schedule. Up/Down and Page Up/Down move the selection, Enter or a double-click installs. Each `index.json` is an array of objects with `file`, `original_file`, `title`, `data_type`, `category`, `description`, `alert`, `source_url` and `screenshot` (relative to the directory).
 
 A slot is 32KB at page 60 + 4n, ten in all:
 

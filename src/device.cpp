@@ -32,6 +32,7 @@ const float TOP_EXTENT = LID_TOP_EXTENT;
 const float BOTTOM_EXTENT = LID_BOTTOM_EXTENT;
 const float PLAIN_BEZEL = 30.0f;
 const float SCREEN_MARGIN = 8.0f;
+const float DEVICE_MARGIN = 8.0f;
 const ImU32 SCRATCH_TINT = IM_COL32(214, 232, 224, 120);
 const ImU32 CASE_SCRATCH_TINT = IM_COL32(246, 249, 251, 150);
 const float WELL_MARGIN = 4.0f;
@@ -635,10 +636,26 @@ void draw_key(ImDrawList *draw, const Shape &shape, const ButtonStyle &style, bo
 
 ImVec2 hit_pad(0, 0);
 
+struct Region {
+    ImRect box;
+    float rounding;
+
+    bool contains(ImVec2 point) const {
+        if (!box.Contains(point)) return false;
+        float radius = std::min(rounding, std::min(box.GetWidth(), box.GetHeight()) * 0.5f);
+        ImVec2 nearest(ImClamp(point.x, box.Min.x + radius, box.Max.x - radius), ImClamp(point.y, box.Min.y + radius, box.Max.y - radius));
+        return ImLengthSqr(point - nearest) <= radius * radius;
+    }
+};
+
+std::vector<Region> case_regions;
+std::vector<ImRect> control_regions;
+
 bool hit(const char *id, const Shape &shape, bool &pressed) {
     ImRect box = bounds(shape);
     box.Min -= hit_pad;
     box.Max += hit_pad;
+    control_regions.push_back(box);
     ImGui::SetCursorScreenPos(box.Min);
     ImGui::InvisibleButton(id, box.GetSize());
     pressed = ImGui::IsItemActive();
@@ -1485,13 +1502,26 @@ KeyboardFrame keyboard_frame(const DeviceLayout &layout) {
     return KeyboardFrame{ origin, kbu };
 }
 
+void record_case(const DeviceLayout &layout) {
+    case_regions.push_back({ ImRect(layout.device_min, layout.device_max), layout.rounding });
+    if (!layout.has_keyboard) return;
+    float u = layout.u;
+    float width = (layout.device_max.x - layout.device_min.x) * 0.9f;
+    float centre = (layout.device_min.x + layout.device_max.x) * 0.5f;
+    ImRect hinge(centre - width * 0.5f, layout.device_max.y - 14 * u, centre + width * 0.5f, layout.device_max.y + HINGE * u + 10 * u);
+    case_regions.push_back({ hinge, hinge.GetHeight() * 0.5f });
+    KeyboardFrame frame = keyboard_frame(layout);
+    ImRect keyboard(frame.at(-KB_PAD_X - 3, -KB_PAD_TOP - 3), frame.at(KB_WIDTH + KB_PAD_X + 3, KB_HEIGHT + KB_PAD_BOTTOM + KB_FRONT_DEPTH));
+    case_regions.push_back({ keyboard, (KB_TOP_RADIUS + 3) * frame.kbu });
+}
+
 void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_scale, const DeviceLayout &layout, const DeviceState &state,
                   const uint8_t *down) {
     ImVec2 device_min = layout.device_min, device_max = layout.device_max, image_min = layout.image_min, image_max = layout.image_max;
     ImVec2 device_size = device_max - device_min;
     float u = layout.u, rounding = layout.rounding;
     if (layout.has_keyboard) draw_hinge(draw, device_min, device_max, u);
-    if (state.focused) {
+    if (state.focused && !state.borderless) {
         draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
     }
     draw->AddRectFilled(device_min + ImVec2(0, 4), device_max + ImVec2(0, 4), IM_COL32(0, 0, 0, 90), rounding);
@@ -1536,31 +1566,49 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
 
 }
 
-float device_fit_height(float width, const DeviceState &state) {
-    bool show_keys = state.show_keys, show_keyboard = state.show_keyboard;
-    float usable = width - 16.0f;
-    if (state.screen_only) return (usable - 2 * SCREEN_MARGIN) * GRID_H / GRID_W + 2 * SCREEN_MARGIN + 28.0f;
-    if (show_keys) {
-        float image_h = usable / (GRID_W / GRID_H + (LEFT_EXTENT + RIGHT_EXTENT) / REFERENCE_LCD_H);
-        float lid = REFERENCE_LCD_H + TOP_EXTENT + BOTTOM_EXTENT + (show_keyboard ? keyboard_height_in_lid_units() : 0.0f);
-        return image_h * lid / REFERENCE_LCD_H + 24.0f;
+static float extra_lid_units(const DeviceState &state) {
+    return state.show_keys && state.show_keyboard ? keyboard_height_in_lid_units() : 0.0f;
+}
+
+int device_fit_cell(ImVec2 content, float framebuffer_scale, const DeviceState &state) {
+    content -= ImVec2(2 * DEVICE_MARGIN, 2 * DEVICE_MARGIN);
+    float image_h;
+    if (state.screen_only) {
+        image_h = std::min((content.x - 2 * SCREEN_MARGIN) * GRID_H / GRID_W, content.y - 2 * SCREEN_MARGIN);
+    } else if (state.show_keys) {
+        float by_width = content.x / (GRID_W / GRID_H + (LEFT_EXTENT + RIGHT_EXTENT) / REFERENCE_LCD_H);
+        float by_height = content.y / (1.0f + (TOP_EXTENT + BOTTOM_EXTENT + extra_lid_units(state)) / REFERENCE_LCD_H);
+        image_h = std::min(by_width, by_height);
+    } else {
+        image_h = std::min((content.x - 2 * PLAIN_BEZEL) * GRID_H / GRID_W, content.y - 2 * PLAIN_BEZEL);
     }
-    float lcd_w = usable - 2 * PLAIN_BEZEL;
-    return lcd_w * GRID_H / GRID_W + 2 * PLAIN_BEZEL + 28.0f;
+    return std::max(DEVICE_MIN_CELL, (int)floorf(image_h * framebuffer_scale / GRID_H + 0.001f));
+}
+
+ImVec2 device_content_size(int cell, float framebuffer_scale, const DeviceState &state) {
+    ImVec2 image(cell * GRID_W / framebuffer_scale, cell * GRID_H / framebuffer_scale);
+    ImVec2 margin(2 * DEVICE_MARGIN, 2 * DEVICE_MARGIN);
+    if (state.screen_only) return image + ImVec2(2 * SCREEN_MARGIN, 2 * SCREEN_MARGIN) + margin;
+    if (!state.show_keys) return image + ImVec2(2 * PLAIN_BEZEL, 2 * PLAIN_BEZEL) + margin;
+    float u = image.y / REFERENCE_LCD_H;
+    return ImVec2(image.x + (LEFT_EXTENT + RIGHT_EXTENT) * u, image.y + (TOP_EXTENT + BOTTOM_EXTENT + extra_lid_units(state)) * u) + margin;
 }
 
 float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height, float compose_seconds, DeviceState &state) {
     ImVec2 origin = ImGui::GetCursorScreenPos();
     float avail_w = ImGui::GetContentRegionAvail().x;
+    case_regions.clear();
+    control_regions.clear();
+    bool ring = state.focused && !state.borderless;
+    int cell = device_fit_cell(ImVec2(avail_w, height), framebuffer_scale, state);
     if (state.screen_only) {
-        float fit_h = std::min((avail_w - 2 * SCREEN_MARGIN) * GRID_H / GRID_W, height - 2 * SCREEN_MARGIN);
-        int cell = std::max(2, (int)floorf(fit_h * framebuffer_scale / GRID_H));
         lcd_compose_setup(cell);
         upload_lcd(renderer, compose_seconds);
         ImVec2 size(cell * GRID_W / framebuffer_scale, cell * GRID_H / framebuffer_scale);
         ImVec2 min = origin + ImVec2((avail_w - size.x) * 0.5f, (height - size.y) * 0.5f);
         ImDrawList *draw = ImGui::GetWindowDrawList();
-        if (state.focused) draw->AddRect(min - ImVec2(3, 3), min + size + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), 4.0f, 0, 2.0f);
+        if (ring) draw->AddRect(min - ImVec2(3, 3), min + size + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), 4.0f, 0, 2.0f);
+        case_regions.push_back({ ImRect(min, min + size), 0.0f });
         if (lcd_texture) draw->AddImage((ImTextureID)(intptr_t)lcd_texture, min, min + size);
         load_scratches(renderer);
         if (scratch_texture && state.scratches) {
@@ -1575,17 +1623,8 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
         return size.y;
     }
 
-    float image_h;
     bool has_keyboard = state.show_keys && state.show_keyboard;
-    float extra_units = has_keyboard ? keyboard_height_in_lid_units() : 0.0f;
-    if (state.show_keys) {
-        float by_width = avail_w / (GRID_W / GRID_H + (LEFT_EXTENT + RIGHT_EXTENT) / REFERENCE_LCD_H);
-        float by_height = height / (1.0f + (TOP_EXTENT + BOTTOM_EXTENT + extra_units) / REFERENCE_LCD_H);
-        image_h = std::min(by_width, by_height);
-    } else {
-        image_h = std::min((avail_w - 2 * PLAIN_BEZEL) * GRID_H / GRID_W, height - 2 * PLAIN_BEZEL);
-    }
-    int cell = std::max(2, (int)floorf(image_h * framebuffer_scale / GRID_H));
+    float extra_units = extra_lid_units(state);
     lcd_compose_setup(cell);
     upload_lcd(renderer, compose_seconds);
 
@@ -1602,6 +1641,7 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
     float rounding = state.show_keys ? 34.0f * u : 18.0f;
 
     DeviceLayout layout = { device_min, device_max, image_min, image_max, u, rounding, has_keyboard };
+    record_case(layout);
     ImGui::SetCursorScreenPos(image_min);
     ImGui::InvisibleButton("device", image_size);
     std::vector<uint8_t> down(LID_KEY_COUNT + KEYBOARD_KEY_COUNT, 0);
@@ -1610,7 +1650,7 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
         if (has_keyboard) input_keyboard(keyboard_frame(layout), state, down.data() + LID_KEY_COUNT);
     }
 
-    BakeKey key = { origin, ImVec2(avail_w, height), framebuffer_scale, state.show_keys, has_keyboard, state.wear, state.focused, down, model_name };
+    BakeKey key = { origin, ImVec2(avail_w, height), framebuffer_scale, state.show_keys, has_keyboard, state.wear, ring, down, model_name };
     ImDrawList *draw = ImGui::GetWindowDrawList();
     if (bake_texture && !bake_pending && key == baked) {
         draw->AddImage((ImTextureID)(intptr_t)bake_texture, bake_min, bake_min + ImVec2((float)bake_texture->w, (float)bake_texture->h) / bake_scale);
@@ -1653,6 +1693,7 @@ void device_flush_bake(SDL_Renderer *renderer) {
         bake_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, width, height);
         if (!bake_texture) return;
         SDL_SetTextureScaleMode(bake_texture, SDL_SCALEMODE_NEAREST);
+        SDL_SetTextureBlendMode(bake_texture, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
     }
     for (ImDrawVert &vertex : bake_list->VtxBuffer) vertex.pos -= bake_min;
     for (ImDrawCmd &command : bake_list->CmdBuffer) command.ClipRect -= ImVec4(bake_min.x, bake_min.y, bake_min.x, bake_min.y);
@@ -1670,12 +1711,22 @@ void device_flush_bake(SDL_Renderer *renderer) {
     SDL_Texture *previous = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, bake_texture);
     SDL_SetRenderScale(renderer, bake_scale, bake_scale);
-    ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-    SDL_SetRenderDrawColorFloat(renderer, background.x, background.y, background.z, 1.0f);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
     SDL_RenderClear(renderer);
     ImGui_ImplSDLRenderer3_RenderDrawData(&data, renderer);
     SDL_SetRenderTarget(renderer, previous);
     baked = pending;
+}
+
+bool device_draggable(float x, float y) {
+    ImVec2 point(x, y);
+    for (const ImRect &control : control_regions) {
+        if (control.Contains(point)) return false;
+    }
+    for (const Region &region : case_regions) {
+        if (region.contains(point)) return true;
+    }
+    return false;
 }
 
 void device_set_model(const char *model) {

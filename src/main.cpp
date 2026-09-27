@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <cfloat>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -35,6 +36,8 @@ static const int IDLE_WAIT_MS = 16;
 static const int REDRAW_TAIL_MS = 500;
 static const int STARTUP_FRAMES = 150;
 static const int TOUCH_RETRY_MS = 2000;
+static const int CONSOLE_MIN_HEIGHT = 200;
+static const int TITLE_BAR_HEIGHT = 32;
 
 static uint64_t start_ticks = 0;
 static std::mutex install_lock;
@@ -97,6 +100,7 @@ struct Options {
     bool wear = false;
     bool backlight_timeout = false;
     bool touchscreen = false;
+    bool borderless = false;
     std::string touch_display = "TETRA";
     std::vector<int> menu_items;
 };
@@ -110,6 +114,7 @@ struct Settings {
     bool wear;
     bool backlight_timeout;
     bool touchscreen;
+    bool borderless;
     int fps;
     float response;
     int width;
@@ -117,7 +122,7 @@ struct Settings {
 
     bool operator==(const Settings &other) const {
         return firmware == other.firmware && show_console == other.show_console && layout == other.layout &&
-               dead_columns == other.dead_columns && scratches == other.scratches && wear == other.wear && backlight_timeout == other.backlight_timeout && touchscreen == other.touchscreen && fps == other.fps && response == other.response &&
+               dead_columns == other.dead_columns && scratches == other.scratches && wear == other.wear && backlight_timeout == other.backlight_timeout && touchscreen == other.touchscreen && borderless == other.borderless && fps == other.fps && response == other.response &&
                width == other.width && height == other.height;
     }
 };
@@ -142,6 +147,7 @@ static void load_settings(const std::string &data, Options &options) {
         else if (name == "wear") options.wear = atoi(value) != 0;
         else if (name == "backlight_timeout") options.backlight_timeout = atoi(value) != 0;
         else if (name == "touchscreen") options.touchscreen = atoi(value) != 0;
+        else if (name == "borderless") options.borderless = atoi(value) != 0;
         else if (name == "fps") options.fps = atoi(value);
         else if (name == "response") options.response = (float)atof(value);
         else if (name == "width") options.width = atoi(value);
@@ -156,8 +162,8 @@ static void save_settings(const std::string &data, const Settings &settings) {
     std::string temporary = path + ".tmp";
     FILE *file = fopen(temporary.c_str(), "w");
     if (!file) return;
-    fprintf(file, "show_console=%d\nlayout=%d\ndead_columns=%d\nscratches=%d\nwear=%d\nbacklight_timeout=%d\ntouchscreen=%d\nfps=%d\nresponse=%g\nwidth=%d\nheight=%d\n",
-            settings.show_console, settings.layout, settings.dead_columns, settings.scratches, settings.wear, settings.backlight_timeout, settings.touchscreen, settings.fps,
+    fprintf(file, "show_console=%d\nlayout=%d\ndead_columns=%d\nscratches=%d\nwear=%d\nbacklight_timeout=%d\ntouchscreen=%d\nborderless=%d\nfps=%d\nresponse=%g\nwidth=%d\nheight=%d\n",
+            settings.show_console, settings.layout, settings.dead_columns, settings.scratches, settings.wear, settings.backlight_timeout, settings.touchscreen, settings.borderless, settings.fps,
             settings.response, settings.width, settings.height);
     if (!settings.firmware.empty()) fprintf(file, "firmware=%s\n", settings.firmware.c_str());
     fclose(file);
@@ -177,7 +183,7 @@ static int menu_item_named(const std::string &name) {
         { "reload", MENU_RELOAD }, { "interrupt", MENU_INTERRUPT }, { "initialize", MENU_INITIALIZE }, { "test-mode", MENU_TEST_MODE }, { "show-console", MENU_SHOW_CONSOLE },
         { "focus-console", MENU_FOCUS_CONSOLE }, { "backlight", MENU_BACKLIGHT }, { "dead-columns", MENU_DEAD_COLUMNS },
         { "period", MENU_FPS_FIRST + 5 }, { "sound", MENU_SOUND },
-        { "next-layout", MENU_LAYOUT_NEXT }, { "apps", MENU_APP_BROWSER }, { "scratches", MENU_SCRATCHES }, { "wear", MENU_WEAR }, { "backlight-timeout", MENU_BACKLIGHT_TIMEOUT }, { "touchscreen", MENU_TOUCHSCREEN },
+        { "next-layout", MENU_LAYOUT_NEXT }, { "apps", MENU_APP_BROWSER }, { "scratches", MENU_SCRATCHES }, { "wear", MENU_WEAR }, { "backlight-timeout", MENU_BACKLIGHT_TIMEOUT }, { "touchscreen", MENU_TOUCHSCREEN }, { "borderless", MENU_BORDERLESS },
     };
     for (auto &entry : names) {
         if (name == entry.first) return entry.second;
@@ -203,12 +209,14 @@ static void usage() {
         "  --layout=N          0 screen only, 1 screen & frame, 2 screen & buttons, 3 screen & keyboard\n"
         "  --touchscreen[=NAME]  take over the named touch display (default TETRA)\n"
         "  --no-touchscreen    stay in a normal window\n"
+        "  --borderless        show only the device, on a transparent window without a frame\n"
+        "  --no-borderless     use a normal window\n"
         "  --period            run the device at a period accurate 10 fps\n"
         "  --fps=N             device frame rate, 0 for unlimited (default 0)\n"
         "  --response=N        LCD response time scale, 0 instant, 1 normal, 4 very slow\n"
         "  --menu=ITEMS        trigger menu items after boot: reload, interrupt, initialize, test-mode, show-console,\n"
         "                      focus-console, backlight, dead-columns, sound, period, apps,\n"
-        "                      backlight-timeout,\n"
+        "                      backlight-timeout, borderless,\n"
         "                      show-keys\n"
         "  --keys=SEQUENCE     type into the device after boot, {DOWN} {ENTER} {F1}, {+LEFT} holds, {-LEFT} releases\n"
         "  --exec=COMMAND      run a console command after boot, repeatable (type help in the console)\n"
@@ -252,6 +260,8 @@ static bool parse_options(int argc, char **argv, Options &options) {
         else if (arg == "--no-keyboard") options.layout = 2;
         else if (arg == "--touchscreen") options.touchscreen = true;
         else if (arg == "--no-touchscreen") options.touchscreen = false;
+        else if (arg == "--borderless") options.borderless = true;
+        else if (arg == "--no-borderless") options.borderless = false;
         else if (const char *v = value("--touchscreen=")) {
             options.touchscreen = true;
             options.touch_display = v;
@@ -369,7 +379,7 @@ static SDL_DisplayID find_display(const std::string &name) {
     return found;
 }
 
-static bool set_touchscreen(SDL_Window *window, Touchscreen &touch, bool enable, const std::string &name) {
+static bool set_touchscreen(SDL_Window *window, Touchscreen &touch, bool enable, const std::string &name, bool bordered) {
     void *native = SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
     if (enable == touch.active) return true;
     if (enable) {
@@ -396,7 +406,7 @@ static bool set_touchscreen(SDL_Window *window, Touchscreen &touch, bool enable,
         SDL_Log("touchscreen: covering %s (%dx%d at %d,%d)", SDL_GetDisplayName(display), bounds.w, bounds.h, bounds.x, bounds.y);
     } else {
         window_cover_display(native, false);
-        SDL_SetWindowBordered(window, true);
+        SDL_SetWindowBordered(window, bordered);
         SDL_SetWindowResizable(window, true);
         SDL_SetWindowSize(window, touch.windowed.w, touch.windowed.h);
         SDL_SetWindowPosition(window, touch.windowed.x, touch.windowed.y);
@@ -539,16 +549,56 @@ struct KeyScript {
     }
 };
 
+static ImVec2 window_for_cell(int cell, float scale, const DeviceState &device, bool console) {
+    ImVec2 size = device_content_size(cell, scale, device) + ImGui::GetStyle().WindowPadding * 2.0f;
+    return ImVec2(ceilf(size.x), ceilf(size.y) + (console ? CONSOLE_MIN_HEIGHT : 0));
+}
+
+static void snap_window(SDL_Window *window, const DeviceState &device, bool console) {
+    float scale = SDL_GetWindowPixelDensity(window);
+    if (scale <= 0) return;
+    int width = 0, height = 0;
+    SDL_GetWindowSize(window, &width, &height);
+    SDL_Rect usable = { 0, 0, INT_MAX, INT_MAX };
+    SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(window), &usable);
+    if (!(SDL_GetWindowFlags(window) & SDL_WINDOW_BORDERLESS)) usable.h -= TITLE_BAR_HEIGHT;
+    ImVec2 smallest = window_for_cell(DEVICE_MIN_CELL, scale, device, console);
+    ImVec2 best = smallest;
+    float best_distance = FLT_MAX;
+    for (int cell = DEVICE_MIN_CELL;; cell++) {
+        ImVec2 size = window_for_cell(cell, scale, device, console);
+        if (cell > DEVICE_MIN_CELL && (size.x > usable.w || size.y > usable.h)) break;
+        float distance = fabsf(size.x - width) + (console ? 0.0f : fabsf(size.y - height));
+        if (distance >= best_distance) break;
+        best_distance = distance;
+        best = size;
+    }
+    int target_w = (int)best.x, target_h = console ? std::max(height, (int)best.y) : (int)best.y;
+    void *native = SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
+    SDL_SetWindowMinimumSize(window, (int)smallest.x, (int)smallest.y);
+    window_set_aspect(native, console ? 0.0f : best.x, console ? 0.0f : best.y);
+    if (target_w != width || target_h != height) SDL_SetWindowSize(window, target_w, target_h);
+}
+
 static void set_console_visible(SDL_Window *window, bool visible, const DeviceState &device, int &restore_height) {
     int width = 0, height = 0;
     SDL_GetWindowSize(window, &width, &height);
-    int device_height = (int)device_fit_height((float)width, device);
-    if (visible) {
-        SDL_SetWindowSize(window, width, std::max(restore_height, device_height + 200));
-    } else {
-        restore_height = height;
-        SDL_SetWindowSize(window, width, device_height);
-    }
+    if (visible) SDL_SetWindowSize(window, width, std::max(restore_height, height));
+    else restore_height = height;
+    snap_window(window, device, visible);
+}
+
+static SDL_HitTestResult SDLCALL drag_by_case(SDL_Window *window, const SDL_Point *area, void *data) {
+    (void)window;
+    (void)data;
+    return device_draggable((float)area->x, (float)area->y) ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+}
+
+static void set_transparent(SDL_Window *window, SDL_Renderer *renderer, bool transparent) {
+    void *native = SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
+    void *layer = SDL_GetRenderMetalLayer(renderer);
+    window_set_transparent(native, layer, transparent);
+    SDL_SetWindowHitTest(window, transparent ? drag_by_case : nullptr, nullptr);
 }
 
 static void draw_transfer_progress(float width) {
@@ -717,7 +767,7 @@ int main(int argc, char **argv) {
     start_ticks = SDL_GetTicks();
 
     SDL_Window *window = SDL_CreateWindow(("SHAM " + options.model).c_str(), options.width, options.height,
-                                          SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
+                                          SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_TRANSPARENT |
                                           (options.screenshot.empty() ? 0 : SDL_WINDOW_HIDDEN));
     SDL_Renderer *renderer = window ? SDL_CreateRenderer(window, nullptr) : nullptr;
     if (!renderer) {
@@ -725,6 +775,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     SDL_SetRenderVSync(renderer, 1);
+    set_transparent(window, renderer, false);
     main_window_id = SDL_GetWindowID(window);
     beeper_init();
 
@@ -813,7 +864,20 @@ int main(int argc, char **argv) {
     Touchscreen touch;
     bool want_touchscreen = options.touchscreen;
     int restore_height = options.height;
-    if (!show_console) set_console_visible(window, false, device, restore_height);
+    bool borderless = options.borderless;
+    bool frameless = false;
+    if (!show_console || borderless) set_console_visible(window, false, device, restore_height);
+    else snap_window(window, device, true);
+    if (borderless) SDL_SetWindowBordered(window, false);
+    auto set_borderless = [&](bool enable) {
+        if (enable == borderless) return;
+        borderless = enable;
+        if (!touch.active) SDL_SetWindowBordered(window, !borderless);
+        if (show_console) set_console_visible(window, !borderless, device, restore_height);
+    };
+    auto refit_window = [&]() {
+        if (!touch.active) snap_window(window, device, show_console && !borderless);
+    };
     int fps = options.fps;
     float response = options.response;
     lcd_set_response(response);
@@ -829,11 +893,15 @@ int main(int argc, char **argv) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             had_event = true;
+            browser_process_event(&event);
             bool device_tab = device_focused && (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) &&
                               event.key.key == SDLK_TAB;
             if (!device_tab) ImGui_ImplSDL3_ProcessEvent(&event);
             if (event.type == SDL_EVENT_QUIT) running = false;
-            if (event.type == SDL_EVENT_KEY_DOWN) {
+            if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == main_window_id) running = false;
+            bool resized = event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED;
+            if (resized && event.window.windowID == main_window_id) refit_window();
+            if (event.type == SDL_EVENT_KEY_DOWN && event.key.windowID == main_window_id) {
                 SDL_Keycode key = event.key.key;
                 SDL_Keymod mod = event.key.mod;
                 if ((mod & SDL_KMOD_CTRL) && key == SDLK_C) continue;
@@ -849,7 +917,7 @@ int main(int argc, char **argv) {
                 if (uint32_t code = held_code(event.key.key)) keys_set_held(code, false);
             }
             if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST) keys_release_all();
-            if (event.type == SDL_EVENT_TEXT_INPUT && device_focused && device.powered) {
+            if (event.type == SDL_EVENT_TEXT_INPUT && event.text.windowID == main_window_id && device_focused && device.powered) {
                 if (!(SDL_GetModState() & (SDL_KMOD_CTRL | SDL_KMOD_GUI))) push_text(event.text.text);
             }
         }
@@ -879,7 +947,7 @@ int main(int argc, char **argv) {
             if (item >= MENU_LAYOUT_FIRST && item < MENU_LAYOUT_END) {
                 layout = item - MENU_LAYOUT_FIRST;
                 apply_layout();
-                if (!show_console) set_console_visible(window, false, device, restore_height);
+                refit_window();
             }
             switch (item) {
                 case MENU_RELOAD:       runtime_request_reload(); break;
@@ -898,10 +966,15 @@ int main(int argc, char **argv) {
                 case MENU_SERIAL_OFF:   runtime_set_serial(nullptr); break;
                 case MENU_SERIAL_PTY:   runtime_set_serial("pty"); break;
                 case MENU_SHOW_CONSOLE:
+                    if (borderless) {
+                        set_borderless(false);
+                        if (show_console) break;
+                    }
                     show_console = !show_console;
                     set_console_visible(window, show_console, device, restore_height);
                     break;
                 case MENU_FOCUS_CONSOLE:
+                    set_borderless(false);
                     if (!show_console) set_console_visible(window, true, device, restore_height);
                     show_console = true;
                     console_focus();
@@ -918,12 +991,13 @@ int main(int argc, char **argv) {
                 case MENU_TOUCHSCREEN:
                     want_touchscreen = !touch.active;
                     touch.reported_missing = false;
-                    set_touchscreen(window, touch, want_touchscreen, options.touch_display);
+                    set_touchscreen(window, touch, want_touchscreen, options.touch_display, !borderless);
                     break;
+                case MENU_BORDERLESS:   set_borderless(!borderless); break;
                 case MENU_LAYOUT_NEXT:
                     layout = (layout + 1) % 4;
                     apply_layout();
-                    if (!show_console) set_console_visible(window, false, device, restore_height);
+                    refit_window();
                     break;
                 default: break;
             }
@@ -933,9 +1007,9 @@ int main(int argc, char **argv) {
             static bool have_saved = false;
             int window_w = 0, window_h = 0;
             SDL_GetWindowSize(window, &window_w, &window_h);
-            Settings current = { running_firmware ? running_firmware->id : options.firmware, show_console, layout, lcd_get_dead_columns(), device.scratches, device.wear, options.backlight_timeout, want_touchscreen, fps, response,
+            Settings current = { running_firmware ? running_firmware->id : options.firmware, show_console, layout, lcd_get_dead_columns(), device.scratches, device.wear, options.backlight_timeout, want_touchscreen, borderless, fps, response,
                                  touch.active ? touch.windowed.w : window_w,
-                                 touch.active ? touch.windowed.h : show_console ? window_h : restore_height };
+                                 touch.active ? touch.windowed.h : show_console && !borderless ? window_h : restore_height };
             if (!have_saved) {
                 saved = current;
                 have_saved = true;
@@ -963,6 +1037,7 @@ int main(int argc, char **argv) {
         menu_set_checked(MENU_WEAR, device.wear);
         menu_set_checked(MENU_BACKLIGHT_TIMEOUT, options.backlight_timeout);
         menu_set_checked(MENU_TOUCHSCREEN, touch.active);
+        menu_set_checked(MENU_BORDERLESS, borderless);
         menu_set_serial(runtime_serial_target());
 
         script.click_x = io.DisplaySize.x * 0.5f;
@@ -972,7 +1047,7 @@ int main(int argc, char **argv) {
         script.step(frame);
         if (want_touchscreen && !touch.active && SDL_GetTicks() >= touch_retry_ms) {
             touch_retry_ms = SDL_GetTicks() + TOUCH_RETRY_MS;
-            set_touchscreen(window, touch, true, options.touch_display);
+            set_touchscreen(window, touch, true, options.touch_display, !borderless);
         }
         if (const char *probe = getenv("POCKET_TOUCH_PROBE"); probe && touch.active && (frame == 80 || frame == 82)) {
             float x = 0, y = 0;
@@ -986,6 +1061,12 @@ int main(int argc, char **argv) {
             push_mouse(event.kind, event.x + touch.panel.x - window_x, event.y + touch.panel.y - window_y);
         }
         device.touch = touch.active;
+        if ((borderless && !touch.active) != frameless) {
+            frameless = !frameless;
+            set_transparent(window, renderer, frameless);
+            refit_window();
+        }
+        device.borderless = frameless;
         if (frame == 45) {
             for (int item : options.menu_items) menu_perform(item);
         }
@@ -1012,13 +1093,20 @@ int main(int argc, char **argv) {
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(io.DisplaySize);
+        if (frameless) ImGui::SetNextWindowBgAlpha(0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, frameless ? 0.0f : ImGui::GetStyle().WindowBorderSize);
         ImGui::Begin("root", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
+        ImGui::PopStyleVar();
 
         float total_height = ImGui::GetContentRegionAvail().y;
-        float device_share = device.show_keys && device.show_keyboard ? 0.72f : 0.52f;
-        bool console_visible = show_console && !touch.active;
-        float device_height = console_visible ? std::max(220.0f, total_height * device_share) : total_height;
+        bool console_visible = show_console && !touch.active && !borderless;
+        float device_height = total_height;
+        if (console_visible) {
+            float scale = io.DisplayFramebufferScale.x;
+            int cell = device_fit_cell(ImVec2(ImGui::GetContentRegionAvail().x, FLT_MAX), scale, device);
+            device_height = std::min(device_content_size(cell, scale, device).y, total_height - CONSOLE_MIN_HEIGHT);
+        }
         device_draw(renderer, io.DisplayFramebufferScale.x, device_height, compose_seconds, device);
 
         if (console_visible) {
@@ -1048,8 +1136,6 @@ int main(int argc, char **argv) {
                 ImGui::End();
             }
         }
-        browser_draw(renderer);
-
         ImGui::Render();
         bool device_keys = !io.WantTextInput && !browser_focused();
         if (device_focused && !device_keys) keys_release_all();
@@ -1057,7 +1143,8 @@ int main(int argc, char **argv) {
         if (device_focused && !SDL_TextInputActive(window)) SDL_StartTextInput(window);
 
         SDL_SetRenderScale(renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
-        SDL_SetRenderDrawColor(renderer, 26, 28, 31, 255);
+        if (frameless) SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        else SDL_SetRenderDrawColor(renderer, 26, 28, 31, 255);
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
         device_flush_bake(renderer);
@@ -1068,9 +1155,10 @@ int main(int argc, char **argv) {
             running = false;
         }
         SDL_RenderPresent(renderer);
+        browser_draw();
     }
 
-    set_touchscreen(window, touch, false, options.touch_display);
+    set_touchscreen(window, touch, false, options.touch_display, !borderless);
     touch_stop();
     runtime_deinit();
     beeper_deinit();
