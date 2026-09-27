@@ -1129,10 +1129,9 @@ struct Bake {
     float scale = 1.0f;
 };
 
-Bake case_bake, overlay_bake;
+Bake overlay_bake;
 CaseKey baked_case;
 OverlayKey baked_overlay, pending_overlay;
-CaseKey pending_case;
 
 bool bake_current(const Bake &bake) {
     return bake.texture && !bake.pending;
@@ -1243,60 +1242,40 @@ void record_case(const DeviceLayout &layout) {
     case_regions.push_back({ keyboard, (KB_TOP_RADIUS + 3) * keyboard_frame(layout).kbu });
 }
 
-float corner_radius(const Shape &shape, ImVec2 corner) {
-    float nearest = FLT_MAX;
-    for (const ImVec2 &point : shape) {
-        ImVec2 d = point - corner;
-        nearest = std::min(nearest, d.x * d.x + d.y * d.y);
-    }
-    return sqrtf(nearest) / (sqrtf(2.0f) - 1.0f);
-}
-
-Shape silhouette(const Shape &top, const Shape &bottom, const std::vector<Shape> &parts, float margin) {
-    ImRect box = bounds(top);
-    box.Add(bounds(bottom));
-    for (const Shape &part : parts) box.Add(bounds(part));
-    ImRect upper = bounds(top), lower = bounds(bottom);
-    float radii[4] = { corner_radius(top, upper.Min), corner_radius(top, ImVec2(upper.Max.x, upper.Min.y)),
-                       corner_radius(bottom, lower.Max), corner_radius(bottom, ImVec2(lower.Min.x, lower.Max.y)) };
-    ImVec2 a = box.Min - ImVec2(margin, margin), b = box.Max + ImVec2(margin, margin);
-    Shape outline;
-    float r;
-    r = radii[1] + margin;
-    add_arc(outline, ImVec2(b.x - r, a.y + r), r, IM_PI * 1.5f, IM_PI * 2.0f, 24);
-    r = radii[2] + margin;
-    add_arc(outline, ImVec2(b.x - r, b.y - r), r, 0, IM_PI * 0.5f, 24);
-    r = radii[3] + margin;
-    add_arc(outline, ImVec2(a.x + r, b.y - r), r, IM_PI * 0.5f, IM_PI, 24);
-    r = radii[0] + margin;
-    add_arc(outline, ImVec2(a.x + r, a.y + r), r, IM_PI, IM_PI * 1.5f, 24);
-    return outline;
-}
-
 const float CASE_MARGIN = 8.0f;
-const float HINGE_ROUNDNESS = 0.3f;
-const float HINGE_END_ROUNDING = 2.0f;
+const ImU32 KB_FACE_TOP = IM_COL32(177, 187, 194, 255);
+const ImU32 KB_FACE_BOTTOM = IM_COL32(161, 172, 179, 255);
+const ImU32 FOCUS_RING = IM_COL32(90, 200, 180, 160);
+const float RING_MARGIN = 3.0f;
+const float RING_WIDTH = 2.0f;
+const float RING_BRIDGE = 20.0f;
+const float SHADOW_OFFSET = 4.0f;
+const float SHADOW_BLUR = 3.0f;
+const float SHADOW_ALPHA = 0.35f;
+const float HINGE_ROUNDNESS = 0.5f;
 const float CAP_END_ROUNDING = 0.45f;
 const float CAP_GROOVE_WIDTH = 2.4f;
-const float CAP_GROOVE_FLOOR = 0.0f;
-const float CAP_GROOVE_SHADE = 0.55f;
-const float KB_FRONT_RELIEF = 3.0f;
+const float CAP_GROOVE_DEPTH = 3.0f;
+const float CAP_GROOVE_SHADE = 0.35f;
+const float KB_FRONT_RELIEF = 1.5f;
+const float KB_FRONT_EDGE = 1.5f;
 const float KB_SEAM_WIDTH = 1.1f;
 const float KB_SEAM_DEPTH = 0.8f;
-const float KB_FACE_RELIEF = 6.0f;
-const float ARCH_RISE_WIDTH = 34.0f;
-const float ARCH_RISE = 3.0f;
-const float ARCH_GROOVE_WIDTH = 3.0f;
-const float ARCH_GROOVE_FLOOR = 0.0f;
-const float ARCH_GROOVE_SHADE = 0.6f;
+const float KB_FACE_RELIEF = 1.2f;
+const float KB_FACE_EDGE = 3.0f;
+const float ARCH_BLEND = 13.0f;
+const float ARCH_SWEEP = 70.0f;
+const float ARCH_GROOVE_WIDTH = 6.0f;
+const float ARCH_GROOVE_DEPTH = 6.0f;
+const float ARCH_GROOVE_SHADE = 0.0f;
 const float JOINT_GROOVE_WIDTH = 1.6f;
-const float JOINT_GROOVE_FLOOR = 0.0f;
-const float LID_EDGE = 6.0f;
+const float JOINT_GROOVE_DEPTH = 1.5f;
+const float LID_EDGE = 2.5f;
+const float LID_RELIEF = 1.0f;
 const float LID_SHEEN = 0.12f;
 const float LID_SHEEN_REACH = 0.45f;
-const float LID_SHADOW_REACH = 5.0f;
-const float LID_SHADOW = 0.35f;
-const float PLAIN_EDGE = 3.0f;
+const float PLAIN_EDGE = 2.0f;
+const float PLAIN_RELIEF = 0.8f;
 const float SCREEN_WALL = 6.0f;
 const float SCREEN_DEPTH = 3.0f;
 const ImU32 LCD_SURROUND = IM_COL32(58, 64, 68, 255);
@@ -1346,11 +1325,10 @@ void add_hinge(CaseScene &scene, const DeviceLayout &layout) {
     Shape left, right, middle;
     ImRect span;
     hinge_span(layout, left, right, middle, span);
-    CaseLayer barrel = case_layer(CASE_CYLINDER, middle, KB_KEYBED);
+    CaseLayer barrel = case_layer(CASE_CYLINDER, middle, KB_FACE_TOP);
     barrel.axis_top = span.Min.y;
     barrel.axis_bottom = span.Max.y;
     barrel.height = span.GetHeight() * HINGE_ROUNDNESS;
-    barrel.radius = HINGE_END_ROUNDING * u;
     barrel.grime = false;
     scene.layers.push_back(barrel);
     for (const Shape *cap : { &left, &right }) {
@@ -1368,7 +1346,7 @@ void add_hinge(CaseScene &scene, const DeviceLayout &layout) {
         groove.edges = on_left ? ImRect(box.GetCenter().x, inside_top, box.Max.x + u, inside_bottom)
                                : ImRect(box.Min.x - u, inside_top, box.GetCenter().x, inside_bottom);
         groove.radius = CAP_GROOVE_WIDTH * u;
-        groove.base = CAP_GROOVE_FLOOR * u;
+        groove.height = CAP_GROOVE_DEPTH * u;
         groove.tint = CAP_GROOVE_SHADE;
         scene.layers.push_back(groove);
     }
@@ -1383,24 +1361,23 @@ void add_keyboard(CaseScene &scene, const DeviceLayout &layout) {
     CaseLayer front = case_layer(CASE_SOLID, translated(face, ImVec2(0, KB_FRONT_DEPTH * k)));
     shade_vertically(front, KB_FRONT_TOP, KB_FRONT_BOTTOM);
     front.height = KB_FRONT_RELIEF * k;
-    front.radius = KB_FRONT_RELIEF * k;
+    front.radius = KB_FRONT_EDGE * k;
     scene.layers.push_back(front);
     CaseLayer seam = case_layer(CASE_GROOVE, translated(face, ImVec2(0, KB_FRONT_SEAM * k)));
     seam.edges = ImRect(face_box.Min.x - k, face_box.Max.y + (KB_FRONT_SEAM - KB_BOTTOM_RADIUS) * k, face_box.Max.x + k, FLT_MAX);
     seam.radius = KB_SEAM_WIDTH * k;
-    seam.base = (KB_FRONT_RELIEF - KB_SEAM_DEPTH) * k;
+    seam.height = KB_SEAM_DEPTH * k;
     scene.layers.push_back(seam);
     CaseLayer top = case_layer(CASE_SOLID, face);
-    shade_vertically(top, lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(152, 163, 171, 255), 0.35f));
-    top.base = front.height;
-    top.height = KB_FACE_RELIEF * k;
-    top.radius = KB_LIP * k;
+    shade_vertically(top, KB_FACE_TOP, KB_FACE_BOTTOM);
+    top.height = (KB_FRONT_RELIEF + KB_FACE_RELIEF) * k;
+    top.radius = KB_FACE_EDGE * k;
     scene.layers.push_back(top);
     if (layout.compact) {
         CaseLayer joint = case_layer(CASE_GROOVE, face);
         joint.edges = ImRect(face_box.Min.x - k, -FLT_MAX, face_box.Max.x + k, face_box.Min.y + k);
         joint.radius = JOINT_GROOVE_WIDTH * u;
-        joint.base = JOINT_GROOVE_FLOOR * u;
+        joint.height = JOINT_GROOVE_DEPTH * u;
         scene.layers.push_back(joint);
         return;
     }
@@ -1410,15 +1387,17 @@ void add_keyboard(CaseScene &scene, const DeviceLayout &layout) {
     ImRect arch(bounds(middle).Min.x, -FLT_MAX, bounds(middle).Max.x, span.Max.y - 0.5f * u);
     CaseLayer rise = case_layer(CASE_RAISE, face);
     rise.edges = arch;
-    rise.radius = ARCH_RISE_WIDTH * u;
-    rise.height = ARCH_RISE * u;
+    rise.radius = ARCH_SWEEP * u;
+    rise.blend = ARCH_BLEND * u;
+    rise.axis_top = span.Min.y;
+    rise.axis_bottom = span.Max.y;
+    rise.height = span.GetHeight() * HINGE_ROUNDNESS;
     scene.layers.push_back(rise);
     CaseLayer groove = case_layer(CASE_GROOVE, face);
     groove.edges = arch;
     groove.radius = ARCH_GROOVE_WIDTH * u;
-    groove.base = ARCH_GROOVE_FLOOR * u;
+    groove.height = ARCH_GROOVE_DEPTH * u;
     groove.tint = ARCH_GROOVE_SHADE;
-    groove.outside_only = true;
     scene.layers.push_back(groove);
 }
 
@@ -1431,14 +1410,14 @@ Shape rounded_rect(ImVec2 a, ImVec2 b, float radius) {
     return shape;
 }
 
-CaseLayer shell_layer(const Shape &outline, float edge) {
+CaseLayer shell_layer(const Shape &outline, float edge, float relief) {
     CaseLayer shell = case_layer(CASE_SOLID, outline);
     ImRect box = bounds(outline);
     shell.top_colour = mix(BEZEL, IM_COL32_WHITE, LID_SHEEN);
     shell.bottom_colour = BEZEL;
     shell.gradient_top = box.Min.y;
     shell.gradient_bottom = box.Min.y + box.GetHeight() * LID_SHEEN_REACH;
-    shell.height = edge;
+    shell.height = relief;
     shell.radius = edge;
     return shell;
 }
@@ -1464,17 +1443,7 @@ void add_screen(CaseScene &scene, const DeviceLayout &layout, bool show_keys) {
 }
 
 void add_lid(CaseScene &scene, const DeviceLayout &layout) {
-    float u = layout.u;
-    Shape body = lid_body(layout);
-    ImRect box = bounds(body);
-    scene.layers.push_back(shell_layer(body, LID_EDGE * u));
-    if (!layout.has_keyboard || layout.compact) return;
-    CaseLayer shadow = case_layer(CASE_GROOVE, body);
-    shadow.edges = ImRect(-FLT_MAX, box.Max.y - 0.5f * u, FLT_MAX, FLT_MAX);
-    shadow.radius = LID_SHADOW_REACH * u;
-    shadow.tint = LID_SHADOW;
-    shadow.outside_only = true;
-    scene.layers.push_back(shadow);
+    scene.layers.push_back(shell_layer(lid_body(layout), LID_EDGE * layout.u, LID_RELIEF * layout.u));
 }
 
 void add_gap(CaseScene &scene, const DeviceLayout &layout) {
@@ -1529,7 +1498,9 @@ void add_keyboard_wells(CaseScene &scene, const DeviceLayout &layout) {
     float finger_y = (face.Max.y - frame.origin.y) / k + KB_FINGER_Y - KB_HEIGHT;
     Shape scoop = pill(frame.at(KB_FINGER_X - KB_FINGER_W * 0.5f, finger_y - KB_FINGER_H * 0.5f),
                        frame.at(KB_FINGER_X + KB_FINGER_W * 0.5f, finger_y + KB_FINGER_H * 0.5f));
-    scene.layers.push_back(recess_layer(scoop, CASE_TROUGH, KB_FINGER_H * 0.5f * k, SCOOP_DEPTH * k, SCOOP_TOP, SCOOP_BOTTOM, SCOOP_TINT));
+    CaseLayer notch = recess_layer(scoop, CASE_TROUGH, KB_FINGER_H * 0.5f * k, SCOOP_DEPTH * k, SCOOP_TOP, SCOOP_BOTTOM, SCOOP_TINT);
+    notch.level_floor = true;
+    scene.layers.push_back(notch);
     Shape well;
     add_arc(well, frame.at(KB_WELL_X, KB_WELL_Y), KB_WELL_R * k, 0, IM_PI * 2.0f, 96);
     well.pop_back();
@@ -1555,7 +1526,7 @@ CaseScene case_scene(const DeviceLayout &layout, const DeviceState &state, float
         add_lid(scene, layout);
         add_lid_wells(scene, layout);
     } else {
-        scene.layers.push_back(shell_layer(rounded_rect(layout.device_min, layout.device_max, layout.rounding), PLAIN_EDGE));
+        scene.layers.push_back(shell_layer(rounded_rect(layout.device_min, layout.device_max, layout.rounding), PLAIN_EDGE, PLAIN_RELIEF));
     }
     add_screen(scene, layout, state.show_keys);
     ImRect box(layout.device_min, layout.device_max);
@@ -1564,6 +1535,14 @@ CaseScene case_scene(const DeviceLayout &layout, const DeviceState &state, float
     scene.origin = ImVec2(floorf((box.Min.x - margin.x) * scale), floorf((box.Min.y - margin.y) * scale)) / scale;
     scene.width = (int)ceilf((box.Max.x + margin.x - scene.origin.x) * scale);
     scene.height = (int)ceilf((box.Max.y + margin.y - scene.origin.y) * scale);
+    scene.ring = state.focused && !state.borderless;
+    scene.ring_colour = FOCUS_RING;
+    scene.ring_margin = RING_MARGIN;
+    scene.ring_width = RING_WIDTH;
+    scene.ring_bridge = state.show_keys ? RING_BRIDGE * layout.u : 0.0f;
+    scene.shadow_offset = SHADOW_OFFSET;
+    scene.shadow_blur = SHADOW_BLUR;
+    scene.shadow_alpha = SHADOW_ALPHA;
     scene.wear = state.wear;
     scene.grime_scale = scale * layout.u;
     scene.wear_area = box;
@@ -1593,35 +1572,6 @@ void show_case(ImDrawList *draw) {
     if (!case_texture) return;
     draw->AddImage((ImTextureID)(intptr_t)case_texture, case_texture_min,
                    case_texture_min + ImVec2((float)case_texture->w, (float)case_texture->h) / case_texture_scale);
-}
-
-void paint_case(ImDrawList *draw, const DeviceLayout &layout, const DeviceState &state) {
-    ImVec2 device_min = layout.device_min, device_max = layout.device_max;
-    float rounding = layout.rounding;
-    if (state.focused && !state.borderless) {
-        if (state.show_keys) {
-            Shape body = lid_body(layout);
-            std::vector<Shape> parts;
-            Shape bottom = body;
-            if (layout.has_keyboard) {
-                Shape face = keyboard_body(layout);
-                parts.push_back(face);
-                bottom = translated(face, ImVec2(0, KB_FRONT_DEPTH * keyboard_frame(layout).kbu));
-                if (!layout.compact) {
-                    Shape left, right, middle;
-                    ImRect span;
-                    hinge_span(layout, left, right, middle, span);
-                    parts.push_back(left);
-                    parts.push_back(right);
-                    parts.push_back(middle);
-                }
-            }
-            Shape ring = silhouette(body, bottom, parts, 3.0f);
-            draw->AddPolyline(ring.data(), (int)ring.size(), IM_COL32(90, 200, 180, 160), ImDrawFlags_Closed, 2.0f);
-        } else {
-            draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
-        }
-    }
 }
 
 void paint_overlay(ImDrawList *draw, const DeviceLayout &layout, const DeviceState &state, const uint8_t *down) {
@@ -1735,19 +1685,12 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
     CaseKey case_key = { origin, ImVec2(avail_w, height), framebuffer_scale, state.show_keys, has_keyboard, state.wear, ring, layout.compact, model_name };
     OverlayKey overlay_key = { case_key, down };
     ImDrawList *draw = ImGui::GetWindowDrawList();
-    bool case_stale = !(bake_current(case_bake) && case_key == baked_case);
-    if (case_stale) {
+    if (!case_texture || !(case_key == baked_case)) {
+        baked_case = case_key;
         load_scratches(renderer);
         raster_case(renderer, case_scene(layout, state, framebuffer_scale));
     }
     show_case(draw);
-    if (!case_stale) {
-        show_bake(case_bake, draw);
-    } else {
-        paint_case(begin_bake(case_bake, draw, origin, ImVec2(avail_w, height), framebuffer_scale), layout, state);
-        finish_bake(case_bake, draw);
-        pending_case = case_key;
-    }
     if (bake_current(overlay_bake) && overlay_key == baked_overlay) {
         show_bake(overlay_bake, draw);
     } else {
@@ -1770,10 +1713,6 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
 }
 
 void device_flush_bake(SDL_Renderer *renderer) {
-    if (case_bake.pending) {
-        flush_bake(case_bake, renderer);
-        baked_case = pending_case;
-    }
     if (overlay_bake.pending) {
         flush_bake(overlay_bake, renderer);
         baked_overlay = pending_overlay;
@@ -1815,6 +1754,5 @@ void device_shutdown(void) {
     scratch_texture = nullptr;
     if (case_texture) SDL_DestroyTexture(case_texture);
     case_texture = nullptr;
-    destroy_bake(case_bake);
     destroy_bake(overlay_bake);
 }

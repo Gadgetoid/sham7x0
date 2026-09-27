@@ -184,6 +184,21 @@ void soften_across(Field &field, int reach) {
     }
 }
 
+std::vector<float> top_edges(const Field &field) {
+    std::vector<float> tops(field.width, FLT_MAX);
+    for (int column = 0; column < field.width; column++) {
+        for (int row = 0; row < field.height; row++) {
+            float distance = field.distance[(size_t)row * field.width + column];
+            if (distance < 0) continue;
+            float above = row > 0 ? -field.distance[(size_t)(row - 1) * field.width + column] : 0.0f;
+            float crossing = distance + above > 0 ? distance / (distance + above) : 0.5f;
+            tops[column] = field.top + row + 0.5f - crossing;
+            break;
+        }
+    }
+    return tops;
+}
+
 Field signed_field(const std::vector<ImVec2> &outline, const ImRect &edges, float band, const Surface &surface, const ImRect *ends = nullptr) {
     Field field;
     field.band = band;
@@ -279,14 +294,15 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
     float radius = std::max(0.0f, layer.radius * place.scale);
     outline = smoothed(outline, std::max(1.5f, radius / 8.0f));
     ImRect edges(place.pixel_x(layer.edges.Min.x), place.pixel_y(layer.edges.Min.y), place.pixel_x(layer.edges.Max.x), place.pixel_y(layer.edges.Max.y));
-    bool full_edges = layer.kind == CASE_SOLID || layer.kind == CASE_CYLINDER || layer.kind == CASE_RECESS;
+    bool full_edges = layer.kind != CASE_GROOVE;
     ImRect everything(-FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX);
     bool cylinder = layer.kind == CASE_CYLINDER;
-    Field field = signed_field(outline, full_edges ? everything : edges, (cylinder ? 0.0f : radius) + 2.0f, surface, cylinder ? &edges : nullptr);
-    Field coverage_field;
-    if (layer.kind == CASE_RAISE) coverage_field = signed_field(outline, everything, 2.0f, surface);
+    float band = cylinder ? 0.0f : radius;
+    Field field = signed_field(outline, full_edges ? everything : edges, band + 2.0f, surface, cylinder ? &edges : nullptr);
     float height = layer.height * place.scale, base = layer.base * place.scale;
     float axis_centre = (layer.axis_top + layer.axis_bottom) * 0.5f, axis_half = (layer.axis_bottom - layer.axis_top) * 0.5f;
+    std::vector<float> top_edge;
+    if (layer.kind == CASE_RAISE) top_edge = top_edges(field);
 
     parallel_rows(field.height, [&](int from, int to) {
         for (int row = from; row < to; row++) {
@@ -307,29 +323,47 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
                     } else {
                         level = base + height * (radius > 0 ? quarter_round(std::max(0.0f, distance) / radius) : 1.0f);
                     }
-                    surface.relief[index] += (level - surface.relief[index]) * cover;
-                    surface.albedo[index] = pack(blend(unpack(surface.albedo[index]), colour, cover));
-                    surface.alpha[index] = cover + surface.alpha[index] * (1.0f - cover);
+                    float covered = surface.alpha[index];
+                    float uncovered = 1.0f - covered;
+                    float replaced = covered > 0 ? std::max(0.0f, cover - uncovered) / covered : 0.0f;
+                    float combined = std::min(1.0f, covered + cover);
+                    surface.relief[index] = surface.relief[index] * (1.0f - replaced) + level * cover;
+                    surface.albedo[index] = pack(blend(unpack(surface.albedo[index]), colour, cover / combined));
+                    surface.alpha[index] = combined;
                     if (cover >= 0.5f) surface.grime[index] = layer.grime;
                 } else if (layer.kind == CASE_RECESS) {
                     if (distance <= -0.5f) continue;
                     float depth = recess_profile(layer.shape, radius > 0 ? (distance + 0.5f) / radius : 1.0f) * fade_at(layer, place, x);
                     if (depth <= 0) continue;
-                    surface.relief[index] -= height * depth;
+                    if (layer.level_floor) surface.relief[index] += (base - height * depth - surface.relief[index]) * std::min(1.0f, depth * 4.0f);
+                    else surface.relief[index] -= height * depth;
                     surface.albedo[index] = pack(blend(unpack(surface.albedo[index]), colour, depth * layer.tint));
                     if (!layer.grime && depth > 0.5f) surface.grime[index] = 0;
                 } else if (layer.kind == CASE_GROOVE) {
                     float t = radius > 0 ? 1.0f - fabsf(distance) / radius : 0.0f;
-                    if (t <= 0 || (layer.outside_only && distance > 0)) continue;
-                    float depth = smoothstep(t) * fade_at(layer, place, x);
-                    surface.relief[index] += (base - surface.relief[index]) * depth;
+                    if (t <= 0) continue;
+                    float spread = fabsf(distance) / radius * 3.0f;
+                    float depth = expf(-0.5f * spread * spread) * fade_at(layer, place, x);
+                    surface.relief[index] -= height * depth;
                     Colour under = unpack(surface.albedo[index]);
                     surface.albedo[index] = pack(blend(under, Colour{ 0, 0, 0 }, depth * layer.tint));
                 } else if (layer.kind == CASE_RAISE) {
-                    float cover = clamp01(coverage_field.at(x, y) + 0.5f);
-                    float t = radius > 0 ? clamp01(distance / radius) : 1.0f;
-                    if (cover <= 0 || t >= 1) continue;
-                    surface.relief[index] += height * (1.0f - t) * (1.0f - t) * cover * fade_at(layer, place, x);
+                    float top = top_edge[column];
+                    if (surface.alpha[index] <= 0 || axis_half <= 0 || top == FLT_MAX) continue;
+                    float below = y + 0.5f - top;
+                    if (below < -radius) continue;
+                    float edge_across = (place.logical_y(y) - below / place.scale - axis_centre) / axis_half;
+                    if (fabsf(edge_across) >= 1.0f) continue;
+                    float meeting = base + height * sqrtf(1.0f - edge_across * edge_across) * (1.0f - smoothstep((fabsf(edge_across) - 0.8f) / 0.2f));
+                    float current = surface.relief[index];
+                    float blend_width = std::max(0.001f, layer.blend * place.scale);
+                    float inside = std::max(0.0f, below), outside = std::max(0.0f, -below);
+                    float reach = radius > 0 ? clamp01(inside / radius) : 1.0f;
+                    float keybed = below >= 0 ? current + std::max(0.0f, meeting - current) * (1.0f - smoothstep(reach))
+                                              : meeting - outside * outside / blend_width * 4.0f;
+                    float barrel = fabsf(across) < 1.0f ? base + height * sqrtf(1.0f - across * across) - inside * inside / blend_width * 4.0f : -FLT_MAX;
+                    float overlap = std::max(0.0f, blend_width - fabsf(barrel - keybed)) / blend_width;
+                    surface.relief[index] = std::max(barrel, keybed) + overlap * overlap * blend_width * 0.25f;
                 }
             }
         }
@@ -393,12 +427,12 @@ void distance_transform(std::vector<float> &grid, int width, int height) {
 }
 
 struct Grid {
-    int width = 0, height = 0;
+    int width = 0, height = 0, pad = 0;
     float step = 1.0f;
     std::vector<float> values;
 
     float sample(float x, float y) const {
-        float gx = x / step - 0.5f, gy = y / step - 0.5f;
+        float gx = x / step - 0.5f + pad, gy = y / step - 0.5f + pad;
         int x0 = std::max(0, std::min(width - 2, (int)floorf(gx))), y0 = std::max(0, std::min(height - 2, (int)floorf(gy)));
         float fx = clamp01(gx - x0), fy = clamp01(gy - y0);
         const float *row0 = &values[(size_t)y0 * width + x0], *row1 = row0 + width;
@@ -407,28 +441,36 @@ struct Grid {
     }
 };
 
-Grid outside_distance(const Surface &surface, float step) {
+Grid outside_distance(const Surface &surface, float scale, int pad) {
     Grid grid;
-    grid.step = step;
-    grid.width = std::max(2, (int)ceilf(surface.width / step));
-    grid.height = std::max(2, (int)ceilf(surface.height / step));
+    grid.step = 1.0f;
+    grid.pad = pad;
+    grid.width = surface.width + 2 * pad;
+    grid.height = surface.height + 2 * pad;
     grid.values.assign((size_t)grid.width * grid.height, DISTANCE_INFINITY);
-    for (int gy = 0; gy < grid.height; gy++) {
-        int y = std::min(surface.height - 1, (int)((gy + 0.5f) * step));
-        for (int gx = 0; gx < grid.width; gx++) {
-            int x = std::min(surface.width - 1, (int)((gx + 0.5f) * step));
-            if (surface.alpha[(size_t)y * surface.width + x] >= 0.5f) grid.values[(size_t)gy * grid.width + gx] = 0;
+    for (int y = 0; y < surface.height; y++) {
+        for (int x = 0; x < surface.width; x++) {
+            float alpha = surface.alpha[(size_t)y * surface.width + x];
+            if (alpha <= 0) continue;
+            float gap = std::max(0.0f, 0.5f - alpha);
+            grid.values[(size_t)(y + pad) * grid.width + x + pad] = gap * gap;
         }
     }
     distance_transform(grid.values, grid.width, grid.height);
+    for (float &value : grid.values) value /= scale;
     return grid;
 }
 
-Grid closed_distance(const Grid &outside, float bridge) {
+Grid closed_distance(const Grid &outside, float bridge, float scale) {
     Grid grid = outside;
-    for (float &value : grid.values) value = value <= bridge ? DISTANCE_INFINITY : 0.0f;
+    for (float &value : grid.values) {
+        float beyond = (value - bridge) * scale;
+        value = beyond > 0 && beyond < 1.5f ? beyond * beyond : DISTANCE_INFINITY;
+    }
     distance_transform(grid.values, grid.width, grid.height);
-    for (float &value : grid.values) value = bridge - value;
+    for (size_t i = 0; i < grid.values.size(); i++) {
+        grid.values[i] = outside.values[i] > bridge ? DISTANCE_INFINITY : bridge - grid.values[i] / scale;
+    }
     return grid;
 }
 
@@ -514,10 +556,10 @@ void case_raster(const CaseScene &scene, std::vector<uint32_t> &pixels) {
     Colour scratch_colour = unpack(scene.scratch_tint);
     bool scratched = scene.wear && scene.scratches && scene.scratch_width > 0;
 
-    Grid outside = outside_distance(surface, scene.scale);
+    Grid outside = outside_distance(surface, scene.scale, (int)ceilf((scene.ring_bridge + 2.0f) * scene.scale));
     Grid ring_distance;
     float ring_target = scene.ring_margin;
-    if (scene.ring && scene.ring_bridge > scene.ring_margin) ring_distance = closed_distance(outside, scene.ring_bridge);
+    if (scene.ring && scene.ring_bridge > scene.ring_margin) ring_distance = closed_distance(outside, scene.ring_bridge, scene.scale);
     Colour ring_colour = unpack(scene.ring_colour);
     float ring_alpha = ((scene.ring_colour >> IM_COL32_A_SHIFT) & 0xff) / 255.0f;
 
@@ -531,7 +573,7 @@ void case_raster(const CaseScene &scene, std::vector<uint32_t> &pixels) {
                 float shadow = scene.shadow_alpha * (1.0f - smoothstep(shadow_distance / std::max(0.01f, scene.shadow_blur)));
                 float below_alpha = shadow;
                 if (scene.ring) {
-                    float value = ring_distance.values.empty() ? outside.sample(px, py) - 0.5f : ring_distance.sample(px, py) + 0.5f;
+                    float value = ring_distance.values.empty() ? outside.sample(px, py) : ring_distance.sample(px, py);
                     float line = clamp01((scene.ring_width * 0.5f - fabsf(value - ring_target)) * scene.scale + 0.5f);
                     if (outside.sample(px, py) <= 0.0f) line = 0;
                     float a = line * ring_alpha;
