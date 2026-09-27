@@ -31,6 +31,7 @@
 #include "machine.h"
 #include "menu.h"
 #include "touch.h"
+#include "ui_scale.h"
 #include "runtime.h"
 #include "serial.h"
 
@@ -634,9 +635,12 @@ static void set_console_visible(SDL_Window *window, bool visible, const DeviceSt
     snap_window(window, device, visible);
 }
 
+static bool menu_open = false;
+
 static SDL_HitTestResult SDLCALL drag_by_case(SDL_Window *window, const SDL_Point *area, void *data) {
     (void)window;
     (void)data;
+    if (menu_open || (SDL_GetGlobalMouseState(nullptr, nullptr) & SDL_BUTTON_RMASK)) return SDL_HITTEST_NORMAL;
     return device_draggable((float)area->x, (float)area->y) ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
 }
 
@@ -878,6 +882,8 @@ int main(int argc, char **argv) {
     ImGuiStyle &style = ImGui::GetStyle();
     style.FontSizeBase = 14.0f;
     style.Colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.11f, 0.12f, 1.0f);
+    const ImGuiStyle base_style = style;
+    apply_ui_scale(window, base_style);
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
 
@@ -982,6 +988,7 @@ int main(int argc, char **argv) {
             if (!device_tab) ImGui_ImplSDL3_ProcessEvent(&event);
             if (event.type == SDL_EVENT_QUIT) running = false;
             if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == main_window_id) running = false;
+            if (event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED && event.window.windowID == main_window_id) apply_ui_scale(window, base_style);
             bool resized = event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED;
             if (resized && event.window.windowID == main_window_id) refit_window();
             if (event.type == SDL_EVENT_KEY_DOWN && event.key.windowID == main_window_id) {
@@ -1233,7 +1240,8 @@ int main(int argc, char **argv) {
         }
         menu_draw();
         ImGui::Render();
-        bool device_keys = !io.WantTextInput && !browser_focused() && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+        menu_open = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+        bool device_keys = !io.WantTextInput && !browser_focused() && !menu_open;
         if (device_focused && !device_keys) keys_release_all();
         device_focused = device_keys;
         if (device_focused && !SDL_TextInputActive(window)) SDL_StartTextInput(window);

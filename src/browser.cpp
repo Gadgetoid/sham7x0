@@ -10,6 +10,7 @@
 #include "imgui_impl_sdlrenderer3.h"
 #include "browser.h"
 #include "runtime.h"
+#include "ui_scale.h"
 
 namespace {
 
@@ -59,6 +60,7 @@ std::map<std::string, SDL_Texture *> textures;
 SDL_Window *window = nullptr;
 SDL_Renderer *renderer = nullptr;
 ImGuiContext *context = nullptr;
+ImGuiStyle base_style;
 
 struct JsonReader {
     const char *position;
@@ -300,6 +302,7 @@ void draw_details(int index) {
 bool open_window() {
     if (window) return true;
     window = SDL_CreateWindow("Apps", 900, 560, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
+    if (window) SDL_SetWindowSize(window, (int)(900 * ui_scale(window)), (int)(560 * ui_scale(window)));
     renderer = window ? SDL_CreateRenderer(window, nullptr) : nullptr;
     if (!renderer) {
         SDL_Log("app browser window failed: %s", SDL_GetError());
@@ -317,6 +320,8 @@ bool open_window() {
     ImGuiStyle &style = ImGui::GetStyle();
     style.FontSizeBase = 14.0f;
     style.Colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.11f, 0.12f, 1.0f);
+    base_style = style;
+    apply_ui_scale(window, base_style);
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
     ImGui::SetCurrentContext(previous);
@@ -452,6 +457,7 @@ void browser_process_event(const SDL_Event *event) {
     }
     ImGuiContext *previous = ImGui::GetCurrentContext();
     ImGui::SetCurrentContext(context);
+    if (event->type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED && event->window.windowID == SDL_GetWindowID(window)) apply_ui_scale(window, base_style);
     ImGui_ImplSDL3_ProcessEvent(event);
     ImGui::SetCurrentContext(previous);
 }
