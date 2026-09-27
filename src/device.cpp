@@ -42,7 +42,6 @@ const uint64_t REPEAT_RATE_MS = 80;
 const ImU32 BEZEL = IM_COL32(178, 189, 199, 255);
 const ImU32 BEZEL_EDGE = IM_COL32(112, 120, 126, 255);
 const ImU32 BEZEL_LIGHT = IM_COL32(226, 232, 236, 255);
-const ImU32 FRAME = IM_COL32(192, 203, 213, 255);
 const ImU32 TEAL_ICON = IM_COL32(176, 196, 196, 255);
 const ImU32 LABEL = IM_COL32(236, 240, 244, 255);
 const ImU32 PRINT = IM_COL32(52, 58, 64, 255);
@@ -381,6 +380,7 @@ struct Mask {
 
 const RecessStyle FLUTE_RECESS = { 1.4f, 7.0f, 0.15f };
 const RecessStyle KEY_WELL = { 1.1f, 5.5f, 0.3f };
+const RecessStyle SCREEN_RECESS = { 1.0f, 6.0f, 1.0f };
 const RecessStyle FLAT_WELL = { 0.9f, 4.5f, 1.0f };
 
 struct RecessPalette {
@@ -1731,9 +1731,15 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     if (state.show_keys) {
         Frame lid_frame{ image_min, image_max, u };
         ImVec2 frame_min = lid_frame.lid(LID_FRAME[0], LID_FRAME[1]), frame_max = lid_frame.lid(LID_FRAME[2], LID_FRAME[3]);
-        draw->AddRectFilled(frame_min, frame_max, FRAME, LID_FRAME_RADIUS * u);
-        draw->AddRect(frame_min, frame_max, BEZEL_LIGHT, LID_FRAME_RADIUS * u, 0, 1.5f);
-        draw->AddRect(frame_min + ImVec2(1, 1), frame_max + ImVec2(1, 1), BEZEL_EDGE, LID_FRAME_RADIUS * u, 0, 1.0f);
+        float r = LID_FRAME_RADIUS * u;
+        Shape recess;
+        add_arc(recess, ImVec2(frame_max.x - r, frame_min.y + r), r, IM_PI * 1.5f, IM_PI * 2.0f, 12);
+        add_arc(recess, ImVec2(frame_max.x - r, frame_max.y - r), r, 0, IM_PI * 0.5f, 12);
+        add_arc(recess, ImVec2(frame_min.x + r, frame_max.y - r), r, IM_PI * 0.5f, IM_PI, 12);
+        add_arc(recess, ImVec2(frame_min.x + r, frame_min.y + r), r, IM_PI, IM_PI * 1.5f, 12);
+        ImU32 plastic = scaled_colour(BEZEL, 0.94f);
+        RecessPalette palette = { scaled_colour(BEZEL, 0.62f), lighten(BEZEL, 40), plastic, plastic, plastic };
+        draw_recess(draw, recess, SCREEN_RECESS, u, Mask(), palette);
     }
     draw->AddRectFilled(image_min - ImVec2(2, 2), image_max + ImVec2(2, 2), IM_COL32(58, 64, 68, 255), 3.0f);
     if (state.show_keys) {
