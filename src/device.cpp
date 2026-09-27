@@ -1498,9 +1498,13 @@ void add_lid_wells(CaseScene &scene, const DeviceLayout &layout) {
             const ImRect &key = lid.side_boxes[index];
             recess.fade_from = scoop.Min.x;
             recess.fade_to = key.Min.x + key.GetHeight() * 0.2f;
+            recess.ramp_from = key.GetCenter().x;
+            recess.ramp_to = scoop.Max.x;
         } else {
             recess.fade_from = scoop.Max.x;
             recess.fade_to = lid.power_box.Max.x - lid.power_box.GetHeight() * 0.2f;
+            recess.ramp_from = lid.power_box.GetCenter().x;
+            recess.ramp_to = scoop.Min.x;
         }
         scene.layers.push_back(recess);
     }

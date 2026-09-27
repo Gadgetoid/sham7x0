@@ -32,6 +32,8 @@ struct CaseLayer {
     bool level_floor = false;
     float fade_from = 0;
     float fade_to = 0;
+    float ramp_from = 0;
+    float ramp_to = 0;
     bool grime = true;
 };
 

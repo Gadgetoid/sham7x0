@@ -227,8 +227,10 @@ Colour layer_colour(const CaseLayer &layer, const Placement &place, int y) {
 }
 
 float fade_at(const CaseLayer &layer, const Placement &place, int x) {
-    if (layer.fade_from == layer.fade_to) return 1.0f;
-    return smoothstep((place.logical_x(x) - layer.fade_from) / (layer.fade_to - layer.fade_from));
+    float fade = 1.0f;
+    if (layer.fade_from != layer.fade_to) fade = smoothstep((place.logical_x(x) - layer.fade_from) / (layer.fade_to - layer.fade_from));
+    if (layer.ramp_from != layer.ramp_to) fade *= 1.0f - smoothstep((place.logical_x(x) - layer.ramp_from) / (layer.ramp_to - layer.ramp_from));
+    return fade;
 }
 
 float recess_profile(CaseRecessShape shape, float t) {
