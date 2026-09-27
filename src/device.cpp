@@ -180,10 +180,25 @@ void load_scratches(SDL_Renderer *renderer) {
     fclose(file);
 }
 
-void case_scratches(ImDrawList *draw, ImVec2 a, ImVec2 b, float rounding, float offset) {
+void textured_polygon(ImDrawList *draw, SDL_Texture *texture, const std::vector<ImVec2> &polygon, const std::vector<int> &indices, ImVec2 a, ImVec2 b,
+                      ImVec2 uv0, ImVec2 uv1, ImU32 tint) {
+    draw->PushTexture((ImTextureID)(intptr_t)texture);
+    draw->PrimReserve((int)indices.size(), (int)polygon.size());
+    ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
+    for (const ImVec2 &point : polygon) {
+        ImVec2 t((point.x - a.x) / (b.x - a.x), (point.y - a.y) / (b.y - a.y));
+        draw->PrimWriteVtx(point, ImVec2(uv0.x + (uv1.x - uv0.x) * t.x, uv0.y + (uv1.y - uv0.y) * t.y), tint);
+    }
+    for (int index : indices) draw->PrimWriteIdx((ImDrawIdx)(base + index));
+    draw->PopTexture();
+}
+
+void case_scratches(ImDrawList *draw, ImVec2 a, ImVec2 b, float rounding, float offset, const std::vector<ImVec2> *polygon = nullptr,
+                    const std::vector<int> *indices = nullptr) {
     if (!scratch_texture) return;
     ImVec2 uv0(offset, offset * 0.5f), uv1(offset + 0.55f, offset * 0.5f + 0.55f * (b.y - a.y) / (b.x - a.x) * scratch_w / scratch_h);
-    draw->AddImageRounded((ImTextureID)(intptr_t)scratch_texture, a, b, uv0, uv1, CASE_SCRATCH_TINT, rounding);
+    if (polygon) textured_polygon(draw, scratch_texture, *polygon, *indices, a, b, uv0, uv1, CASE_SCRATCH_TINT);
+    else draw->AddImageRounded((ImTextureID)(intptr_t)scratch_texture, a, b, uv0, uv1, CASE_SCRATCH_TINT, rounding);
 }
 
 void upload_lcd(SDL_Renderer *renderer, float compose_seconds) {
@@ -1351,9 +1366,9 @@ void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face
     }
     if (grime_texture) {
         ImRect box = face_box;
-        draw->AddImageRounded((ImTextureID)(intptr_t)grime_texture, box.Min, box.Max, ImVec2(0, 0), ImVec2(1, 1),
-                              IM_COL32_WHITE, KB_TOP_RADIUS * k);
-        if (wear) case_scratches(draw, box.Min, box.Max, KB_TOP_RADIUS * k, 0.45f);
+        std::vector<int> indices = lid_indices(LID_SHAPE_KEYBOARD_BODY);
+        textured_polygon(draw, grime_texture, face, indices, box.Min, box.Max, ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE);
+        if (wear) case_scratches(draw, box.Min, box.Max, KB_TOP_RADIUS * k, 0.45f, &face, &indices);
     }
     const int lip_rings = 10;
     std::vector<float> offsets = { 0.6f * k };
@@ -1706,10 +1721,11 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     build_grime(renderer, (int)(device_size.x * framebuffer_scale), (int)(device_size.y * framebuffer_scale), framebuffer_scale * u, state.wear);
     wear_labels = state.wear;
     wear_grime = state.wear;
-    draw->AddImageRounded((ImTextureID)(intptr_t)grime_texture, device_min, device_max, ImVec2(0, 0), ImVec2(1, 1),
-                          IM_COL32_WHITE, rounding);
+    std::vector<int> body_indices = state.show_keys ? lid_indices(LID_SHAPE_BODY) : std::vector<int>();
+    if (state.show_keys) textured_polygon(draw, grime_texture, body, body_indices, device_min, device_max, ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE);
+    else draw->AddImageRounded((ImTextureID)(intptr_t)grime_texture, device_min, device_max, ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, rounding);
     load_scratches(renderer);
-    if (state.wear) case_scratches(draw, device_min, device_max, rounding, 0.0f);
+    if (state.wear) case_scratches(draw, device_min, device_max, rounding, 0.0f, state.show_keys ? &body : nullptr, &body_indices);
     if (!state.show_keys) draw->AddRectFilledMultiColor(device_min + ImVec2(rounding, 2), ImVec2(device_max.x - rounding, device_min.y + device_size.y * 0.45f),
                                   IM_COL32(255, 255, 255, 40), IM_COL32(255, 255, 255, 40), IM_COL32(255, 255, 255, 0), IM_COL32(255, 255, 255, 0));
     if (state.show_keys) {
