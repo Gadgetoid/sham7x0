@@ -1715,16 +1715,33 @@ Shape silhouette(const std::vector<Shape> &parts, float margin) {
         left_side.push_back(ImVec2(lo, y));
         right_side.push_back(ImVec2(hi, y));
     }
-    const int reach = (int)(margin * 6);
-    Shape left_wide = left_side, right_wide = right_side;
-    for (int i = 0; i < (int)left_side.size(); i++) {
-        for (int j = std::max(0, i - reach); j <= std::min((int)left_side.size() - 1, i + reach); j++) {
-            left_wide[i].x = std::min(left_wide[i].x, left_side[j].x);
-            right_wide[i].x = std::max(right_wide[i].x, right_side[j].x);
+    const float radius = 14.0f;
+    const int reach = (int)radius;
+    int count = (int)left_side.size();
+    auto close = [&](Shape &side, float sign) {
+        Shape dilated = side, closed = side;
+        for (int i = 0; i < count; i++) {
+            for (int j = std::max(0, i - reach); j <= std::min(count - 1, i + reach); j++) {
+                float d = (float)(i - j);
+                float bulge = sqrtf(std::max(0.0f, radius * radius - d * d));
+                float x = side[j].x + sign * bulge;
+                if (sign > 0 ? x > dilated[i].x : x < dilated[i].x) dilated[i].x = x;
+            }
         }
-    }
-    left_side = left_wide;
-    right_side = right_wide;
+        for (int i = 0; i < count; i++) {
+            closed[i].x = dilated[i].x - sign * radius;
+            for (int j = std::max(0, i - reach); j <= std::min(count - 1, i + reach); j++) {
+                float d = (float)(i - j);
+                float bulge = sqrtf(std::max(0.0f, radius * radius - d * d));
+                float x = dilated[j].x - sign * bulge;
+                if (sign > 0 ? x < closed[i].x : x > closed[i].x) closed[i].x = x;
+            }
+            if (sign > 0 ? closed[i].x < side[i].x : closed[i].x > side[i].x) closed[i].x = side[i].x;
+        }
+        side = closed;
+    };
+    close(left_side, -1.0f);
+    close(right_side, 1.0f);
     Shape outline = right_side;
     for (auto it = left_side.rbegin(); it != left_side.rend(); ++it) outline.push_back(*it);
     return outset(outline, margin);
