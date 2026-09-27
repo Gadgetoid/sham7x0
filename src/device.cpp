@@ -11,6 +11,7 @@
 #include "imgui_internal.h"
 #include "imgui_impl_sdlrenderer3.h"
 
+#include "case_raster.h"
 #include "device.h"
 #include "keyboard_layout.h"
 #include "lid_layout.h"
@@ -69,6 +70,7 @@ SDL_Texture *lcd_texture = nullptr;
 SDL_Texture *grime_texture = nullptr;
 SDL_Texture *scratch_texture = nullptr;
 bool scratch_tried = false;
+std::vector<uint8_t> scratch_alpha;
 int scratch_w = 0, scratch_h = 0;
 int grime_w = 0, grime_h = 0;
 bool grime_wear = false;
@@ -168,6 +170,7 @@ void load_scratches(SDL_Renderer *renderer) {
     if (fread(size, sizeof size, 1, file) == 1) {
         std::vector<uint8_t> alpha((size_t)size[0] * size[1]);
         if (fread(alpha.data(), 1, alpha.size(), file) == alpha.size()) {
+            scratch_alpha = alpha;
             std::vector<uint32_t> pixels(alpha.size());
             for (size_t i = 0; i < alpha.size(); i++) pixels[i] = 0x00ffffffu | (uint32_t)alpha[i] << 24;
             scratch_w = size[0];
@@ -949,7 +952,6 @@ const float KEY_TRAVEL = 2.6f;
 const float KEY_SHOULDER = 4.0f;
 const float KB_SQUARE_CORNER = 0.22f;
 const ImU32 KB_RING = IM_COL32(96, 84, 156, 255);
-const ImU32 KB_HIGHLIGHT = IM_COL32(236, 240, 242, 255);
 
 KeyRepeat keyboard_repeats[4];
 
@@ -1265,182 +1267,9 @@ ImU32 scaled_colour(ImU32 colour, float k, float sheen = 0.0f) {
     return IM_COL32(channel(r), channel(g), channel(b), 255);
 }
 
-ImU32 tube_colour(float t, ImU32 base, ImU32 top_colour, ImU32 bottom_colour) {
-    float angle = (t - 0.5f) * IM_PI;
-    float light = cosf(angle + 0.55f);
-    float shade = 0.7f + 0.34f * std::max(0.0f, light);
-    float sheen = 0.32f * powf(std::max(0.0f, cosf(angle + 0.7f)), 18.0f);
-    ImU32 colour = scaled_colour(base, shade, sheen);
-    if (t < 0.12f) colour = mix(top_colour, colour, t / 0.12f);
-    if (t > 0.9f) colour = mix(colour, bottom_colour, (t - 0.9f) / 0.1f);
-    return colour;
-}
-
-Shape clip_band(const Shape &polygon, float y0, float y1) {
-    Shape shape = polygon;
-    for (int side = 0; side < 2 && !shape.empty(); side++) {
-        Shape out;
-        float limit = side == 0 ? y0 : y1;
-        auto inside = [&](ImVec2 p) { return side == 0 ? p.y >= limit : p.y <= limit; };
-        for (size_t i = 0; i < shape.size(); i++) {
-            ImVec2 a = shape[i], b = shape[(i + 1) % shape.size()];
-            if (inside(a)) out.push_back(a);
-            if (inside(a) != inside(b)) out.push_back(a + (b - a) * ((limit - a.y) / (b.y - a.y)));
-        }
-        shape = out;
-    }
-    return shape;
-}
-
-void tube(ImDrawList *draw, const Shape &shape, const std::vector<int> &indices, float y0, float y1, ImU32 base, ImU32 top_colour, ImU32 bottom_colour,
-          float until = FLT_MAX) {
-    const int bands = 24;
-    std::vector<int> triangles = indices.empty() ? ear_clip(shape) : indices;
-    ImVec2 uv = draw->_Data->TexUvWhitePixel;
-    float fade = until < FLT_MAX ? (y1 - y0) * 0.55f : 0.0f;
-    auto colour_at = [&](float y) {
-        ImU32 colour = tube_colour(std::max(0.0f, std::min(1.0f, (y - y0) / (y1 - y0))), base, top_colour, bottom_colour);
-        if (fade <= 0) return colour;
-        float t = std::max(0.0f, std::min(1.0f, (y - (until - fade)) / fade));
-        return faded(colour, 1.0f - t * t * (3 - 2 * t));
-    };
-    for (size_t t = 0; t + 2 < triangles.size(); t += 3) {
-        Shape triangle = { shape[triangles[t]], shape[triangles[t + 1]], shape[triangles[t + 2]] };
-        for (int band = -1; band <= bands; band++) {
-            float a = band < 0 ? -FLT_MAX : y0 + (y1 - y0) * band / bands;
-            float b = band == bands ? FLT_MAX : y0 + (y1 - y0) * (band + 1) / bands;
-            b = std::min(b, until);
-            if (a >= b) continue;
-            Shape piece = clip_band(triangle, a, b);
-            if (piece.size() < 3) continue;
-            draw->PrimReserve((int)(piece.size() - 2) * 3, (int)piece.size());
-            ImDrawIdx base_index = (ImDrawIdx)draw->_VtxCurrentIdx;
-            for (const ImVec2 &point : piece) draw->PrimWriteVtx(point, uv, colour_at(point.y));
-            for (size_t k = 1; k + 1 < piece.size(); k++) {
-                draw->PrimWriteIdx(base_index);
-                draw->PrimWriteIdx((ImDrawIdx)(base_index + k));
-                draw->PrimWriteIdx((ImDrawIdx)(base_index + k + 1));
-            }
-        }
-    }
-}
-
-void cap_shade(ImDrawList *draw, const Shape &shape, const std::vector<int> &indices, bool left, float width) {
-    ImRect box = bounds(shape);
-    int start = draw->VtxBuffer.Size;
-    fill_polygon(draw, shape, IM_COL32_WHITE, indices);
-    float edge = left ? box.Min.x : box.Max.x;
-    for (int i = start; i < draw->VtxBuffer.Size; i++) {
-        float t = std::min(1.0f, fabsf(draw->VtxBuffer[i].pos.x - edge) / width);
-        draw->VtxBuffer[i].col = IM_COL32(24, 28, 34, (int)(110 * (1.0f - t) * (1.0f - t)));
-    }
-}
-
-void draw_groove(ImDrawList *draw, const Shape &face, float from_x, float to_x, float below_y, float k) {
-    Shape edge;
-    ImRect box = bounds(face);
-    for (const ImVec2 &point : face) {
-        if (point.x > from_x && point.x < to_x && point.y < below_y && point.y < box.GetCenter().y) edge.push_back(point);
-    }
-    std::sort(edge.begin(), edge.end(), [](ImVec2 a, ImVec2 b) { return a.x < b.x; });
-    if (edge.size() < 2) return;
-    Shape shadow = translated(edge, ImVec2(0, -1.2f * k));
-    draw->AddPolyline(shadow.data(), (int)shadow.size(), IM_COL32(40, 46, 54, 95), 0, 1.1f * k);
-    Shape light = translated(edge, ImVec2(0, 0.6f * k));
-    draw->AddPolyline(light.data(), (int)light.size(), IM_COL32(246, 250, 252, 220), 0, 1.0f * k);
-}
-
-float top_edge(const Shape &shape, float x) {
-    float top = FLT_MAX;
-    for (size_t i = 0; i < shape.size(); i++) {
-        ImVec2 a = shape[i], b = shape[(i + 1) % shape.size()];
-        if ((a.x <= x) != (b.x <= x)) top = std::min(top, a.y + (x - a.x) * (b.y - a.y) / (b.x - a.x));
-    }
-    return top;
-}
-
-void arch_lip(ImDrawList *draw, const Shape &face, ImRect hinge, float k) {
-    const int columns = 96, rows = 10;
-    float depth = hinge.GetHeight() * 0.9f;
-    ImVec2 uv = draw->_Data->TexUvWhitePixel;
-    ImRect box = bounds(face);
-    float x0 = std::max(box.Min.x, hinge.Min.x), x1 = std::min(box.Max.x, hinge.Max.x);
-    auto colour = [&](float t, float edge) {
-        float lit = expf(-powf(t / 0.12f, 2.0f)) * 0.55f;
-        float shade = expf(-powf((t - 0.35f) / 0.22f, 2.0f)) * 0.22f;
-        int alpha_lit = (int)(255 * lit * edge), alpha_shade = (int)(255 * shade * edge);
-        return alpha_lit >= alpha_shade ? IM_COL32(246, 250, 252, alpha_lit) : IM_COL32(40, 48, 56, alpha_shade);
-    };
-    draw->PrimReserve(columns * rows * 6, (columns + 1) * (rows + 1));
-    ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
-    for (int column = 0; column <= columns; column++) {
-        float x = x0 + (x1 - x0) * column / columns;
-        float top = top_edge(face, x);
-        float lift = std::max(0.0f, std::min(1.0f, (hinge.Max.y - top) / (depth * 0.4f)));
-        float edge = std::min(1.0f, std::min(x - x0, x1 - x) / (hinge.GetWidth() * 0.04f)) * lift;
-        for (int row = 0; row <= rows; row++) {
-            float t = (float)row / rows;
-            draw->PrimWriteVtx(ImVec2(x, top + 0.5f + depth * t), uv, colour(t, edge));
-        }
-    }
-    for (int column = 0; column < columns; column++) {
-        for (int row = 0; row < rows; row++) {
-            ImDrawIdx i = (ImDrawIdx)(base + column * (rows + 1) + row);
-            draw->PrimWriteIdx(i); draw->PrimWriteIdx((ImDrawIdx)(i + rows + 1)); draw->PrimWriteIdx((ImDrawIdx)(i + rows + 2));
-            draw->PrimWriteIdx(i); draw->PrimWriteIdx((ImDrawIdx)(i + rows + 2)); draw->PrimWriteIdx((ImDrawIdx)(i + 1));
-        }
-    }
-}
-
-void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face, ImRect hinge, float hinge_top, bool compact, bool wear) {
+void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face) {
     float k = frame.kbu;
-    Shape front = translated(face, ImVec2(0, KB_FRONT_DEPTH * k));
-    fill(draw, translated(front, ImVec2(0, 4 * k)), IM_COL32(0, 0, 0, 80), IM_COL32(0, 0, 0, 120));
-    fill(draw, front, KB_FRONT_TOP, KB_FRONT_BOTTOM);
     ImRect face_box = bounds(face);
-    Shape seam;
-    float bottom = face_box.Max.y;
-    for (const ImVec2 &point : face) {
-        if (point.y > bottom - KB_BOTTOM_RADIUS * k - 0.01f) seam.push_back(point + ImVec2(0, KB_FRONT_SEAM * k));
-    }
-    std::sort(seam.begin(), seam.end(), [](ImVec2 a, ImVec2 b) { return a.x < b.x; });
-    draw->AddPolyline(seam.data(), (int)seam.size(), KB_SEAM_DARK, 0, 0.8f * k);
-    Shape seam_light = translated(seam, ImVec2(0, 0.8f * k));
-    draw->AddPolyline(seam_light.data(), (int)seam_light.size(), faded(KB_SEAM_LIGHT, 0.6f), 0, 0.6f * k);
-
-    {
-        std::vector<int> indices = lid_indices(LID_SHAPE_KEYBOARD_BODY);
-        int start = draw->VtxBuffer.Size;
-        fill_polygon(draw, face, IM_COL32_WHITE, indices);
-        ImGui::ShadeVertsLinearColorGradientKeepAlpha(draw, start, draw->VtxBuffer.Size, ImVec2(0, face_box.Min.y), ImVec2(0, face_box.Max.y),
-                                                      lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(152, 163, 171, 255), 0.35f));
-        if (hinge.GetWidth() > 0) arch_lip(draw, face, hinge, k);
-    }
-    if (grime_texture) {
-        ImRect box = face_box;
-        std::vector<int> indices = lid_indices(LID_SHAPE_KEYBOARD_BODY);
-        textured_polygon(draw, grime_texture, face, indices, box.Min, box.Max, ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE);
-        if (wear) case_scratches(draw, box.Min, box.Max, KB_TOP_RADIUS * k, 0.45f, &face, &indices);
-    }
-    const int lip_rings = 10;
-    std::vector<float> offsets = { 0.6f * k };
-    for (int ring = 0; ring <= lip_rings; ring++) offsets.push_back(-KB_LIP * k * ring / lip_rings);
-    ImU32 front_edge = mix(KB_FRONT_TOP, IM_COL32(120, 134, 142, 255), 0.2f);
-    ImU32 side_edge = mix(KB_KEYBED, IM_COL32(132, 142, 148, 255), 0.6f);
-    ring_mesh(draw, face, offsets, [&](ImVec2 normal, int ring) {
-        float facing_front = smoothstep(normal.y);
-        ImU32 edge = mix(mix(KB_KEYBED, side_edge, fabsf(normal.x)), front_edge, facing_front);
-        if (normal.y < 0) edge = mix(KB_KEYBED, BEZEL_LIGHT, -normal.y * 0.22f);
-        if (ring == 0) return edge & ~IM_COL32_A_MASK;
-        float t = (float)(ring - 1) / lip_rings;
-        ImU32 colour = mix(edge, KB_KEYBED, smoothstep(t));
-        float highlight = expf(-powf((t - 0.28f) / 0.12f, 2.0f)) * facing_front * 0.25f;
-        colour = mix(colour, KB_HIGHLIGHT, highlight);
-        return faded(colour, 1.0f - smoothstep((t - 0.7f) / 0.3f));
-    });
-
-    if (compact) draw_groove(draw, face, face_box.Min.x - 1, face_box.Max.x + 1, face_box.Min.y + 1.0f, k);
-    else if (hinge.GetWidth() > 0) draw_groove(draw, face, hinge.Min.x, hinge.Max.x, hinge.Max.y, k);
     float finger_y = (face_box.Max.y - frame.origin.y) / k + KB_FINGER_Y - KB_HEIGHT;
     draw_recess(draw, pill(frame.at(KB_FINGER_X - KB_FINGER_W * 0.5f, finger_y - KB_FINGER_H * 0.5f),
                            frame.at(KB_FINGER_X + KB_FINGER_W * 0.5f, finger_y + KB_FINGER_H * 0.5f)),
@@ -1505,9 +1334,9 @@ void draw_key_hole(ImDrawList *draw, const Shape &hole, float k) {
     }
 }
 
-void paint_keybed(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face, ImRect hinge, float hinge_top, bool compact, bool wear) {
+void paint_keybed(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face) {
     float k = frame.kbu;
-    draw_keybed(draw, frame, face, hinge, hinge_top, compact, wear);
+    draw_keybed(draw, frame, face);
     for (const KeyboardKey &key : keyboard_keys) draw_key_hole(draw, outset(keyboard_key_shape(frame, key), KEY_HOLE_GAP * k), k);
 }
 
@@ -1656,47 +1485,6 @@ void hinge_span(const DeviceLayout &layout, Shape &left, Shape &right, Shape &mi
     span = bounds(left);
     span.Add(bounds(right));
     span.Add(bounds(middle));
-}
-
-void draw_hinge_barrel(ImDrawList *draw, const DeviceLayout &layout) {
-    Shape left, right, middle;
-    ImRect span;
-    hinge_span(layout, left, right, middle, span);
-    fill(draw, translated(middle, ImVec2(0, 3 * layout.u)), IM_COL32(0, 0, 0, 60), IM_COL32(0, 0, 0, 90));
-    ImU32 face = lighten(KB_KEYBED, 10);
-    tube(draw, middle, lid_indices(LID_SHAPE_KEYBOARD_HINGE), span.Min.y, span.Max.y, KB_KEYBED, scaled_colour(KB_KEYBED, 0.6f), face);
-}
-
-Shape inner_edge(const Shape &cap, bool left) {
-    ImRect box = bounds(cap);
-    float threshold = box.Min.x + box.GetWidth() * 0.5f;
-    Shape edge;
-    for (const ImVec2 &point : cap) {
-        bool inner = left ? point.x > threshold : point.x < box.Max.x - box.GetWidth() * 0.5f;
-        if (inner && point.y > box.Min.y + 0.01f && point.y < box.Max.y - 0.01f) edge.push_back(point);
-    }
-    std::sort(edge.begin(), edge.end(), [](ImVec2 a, ImVec2 b) { return a.y < b.y; });
-    return edge;
-}
-
-void draw_hinge_caps(ImDrawList *draw, const DeviceLayout &layout) {
-    Shape left, right, middle;
-    ImRect span;
-    hinge_span(layout, left, right, middle, span);
-    float u = layout.u;
-    float cap = bounds(left).GetWidth() * 0.45f;
-    for (int side = 0; side < 2; side++) {
-        Shape shape = translated(side == 0 ? left : right, ImVec2(0, -1.5f));
-        std::vector<int> indices = lid_indices(side == 0 ? LID_SHAPE_HINGE_LEFT : LID_SHAPE_HINGE_RIGHT);
-        float k = bezel_brightness(bounds(shape).GetCenter().x, layout.image_min, layout.image_max, u);
-        tube(draw, shape, indices, span.Min.y - 1.5f, span.Max.y, BEZEL, scaled_colour(BEZEL, k), scaled_colour(BEZEL, 0.52f));
-        cap_shade(draw, shape, indices, side == 0, cap);
-        Shape edge = inner_edge(side == 0 ? left : right, side == 0);
-        if (edge.size() < 2) continue;
-        draw->AddPolyline(edge.data(), (int)edge.size(), IM_COL32(28, 32, 38, 200), 0, 1.6f * u);
-        Shape light = translated(edge, ImVec2(side == 0 ? -1.2f * u : 1.2f * u, 0));
-        draw->AddPolyline(light.data(), (int)light.size(), IM_COL32(236, 242, 246, 110), 0, 0.8f * u);
-    }
 }
 
 
@@ -1874,18 +1662,168 @@ Shape silhouette(const Shape &top, const Shape &bottom, const std::vector<Shape>
     return outline;
 }
 
-ImRect keyboard_hinge_span(const DeviceLayout &layout, float &hinge_top) {
-    Frame frame{ layout.image_min, layout.image_max, layout.u };
-    ImRect hinge = layout.compact ? ImRect() : bounds(lid_shape(frame, LID_SHAPE_KEYBOARD_HINGE));
-    hinge_top = hinge.Min.y;
-    if (!layout.compact) {
-        Shape left, right, middle;
-        ImRect span;
-        hinge_span(layout, left, right, middle, span);
-        hinge = ImRect(hinge.Min.x, span.Min.y, hinge.Max.x, span.Max.y);
-        hinge_top = span.Min.y;
+const float CASE_MARGIN = 8.0f;
+const float HINGE_ROUNDNESS = 0.3f;
+const float HINGE_END_ROUNDING = 2.0f;
+const float CAP_END_ROUNDING = 0.45f;
+const float CAP_GROOVE_WIDTH = 2.4f;
+const float CAP_GROOVE_FLOOR = 0.0f;
+const float CAP_GROOVE_SHADE = 0.55f;
+const float KB_FRONT_RELIEF = 3.0f;
+const float KB_SEAM_WIDTH = 1.1f;
+const float KB_SEAM_DEPTH = 0.8f;
+const float KB_FACE_RELIEF = 6.0f;
+const float ARCH_RISE_WIDTH = 34.0f;
+const float ARCH_RISE = 3.0f;
+const float ARCH_GROOVE_WIDTH = 3.0f;
+const float ARCH_GROOVE_FLOOR = 0.0f;
+const float ARCH_GROOVE_SHADE = 0.6f;
+const float JOINT_GROOVE_WIDTH = 1.6f;
+const float JOINT_GROOVE_FLOOR = 0.0f;
+
+SDL_Texture *case_texture = nullptr;
+ImVec2 case_texture_min;
+float case_texture_scale = 1.0f;
+std::vector<uint32_t> case_pixels;
+
+CaseLayer case_layer(CaseLayerKind kind, const Shape &outline, ImU32 colour = 0) {
+    CaseLayer layer;
+    layer.kind = kind;
+    layer.outline = outline;
+    layer.top_colour = colour;
+    layer.bottom_colour = colour;
+    return layer;
+}
+
+void shade_vertically(CaseLayer &layer, ImU32 top, ImU32 bottom) {
+    ImRect box = bounds(layer.outline);
+    layer.top_colour = top;
+    layer.bottom_colour = bottom;
+    layer.gradient_top = box.Min.y;
+    layer.gradient_bottom = box.Max.y;
+}
+
+void add_hinge(CaseScene &scene, const DeviceLayout &layout) {
+    float u = layout.u;
+    Shape left, right, middle;
+    ImRect span;
+    hinge_span(layout, left, right, middle, span);
+    CaseLayer barrel = case_layer(CASE_CYLINDER, middle, KB_KEYBED);
+    barrel.axis_top = span.Min.y;
+    barrel.axis_bottom = span.Max.y;
+    barrel.height = span.GetHeight() * HINGE_ROUNDNESS;
+    barrel.radius = HINGE_END_ROUNDING * u;
+    barrel.grime = false;
+    scene.layers.push_back(barrel);
+    for (const Shape *cap : { &left, &right }) {
+        ImRect box = bounds(*cap);
+        CaseLayer end = barrel;
+        end.outline = *cap;
+        end.top_colour = BEZEL;
+        end.bottom_colour = BEZEL;
+        bool on_left = cap == &left;
+        end.radius = box.GetWidth() * CAP_END_ROUNDING;
+        end.edges = on_left ? ImRect(-FLT_MAX, -FLT_MAX, box.GetCenter().x, FLT_MAX) : ImRect(box.GetCenter().x, -FLT_MAX, FLT_MAX, FLT_MAX);
+        scene.layers.push_back(end);
+        CaseLayer groove = case_layer(CASE_GROOVE, *cap);
+        float inside_top = box.Min.y + 0.5f * u, inside_bottom = box.Max.y - 0.5f * u;
+        groove.edges = on_left ? ImRect(box.GetCenter().x, inside_top, box.Max.x + u, inside_bottom)
+                               : ImRect(box.Min.x - u, inside_top, box.GetCenter().x, inside_bottom);
+        groove.radius = CAP_GROOVE_WIDTH * u;
+        groove.base = CAP_GROOVE_FLOOR * u;
+        groove.tint = CAP_GROOVE_SHADE;
+        scene.layers.push_back(groove);
     }
-    return hinge;
+}
+
+void add_keyboard(CaseScene &scene, const DeviceLayout &layout) {
+    float u = layout.u;
+    KeyboardFrame frame = keyboard_frame(layout);
+    float k = frame.kbu;
+    Shape face = keyboard_body(layout);
+    ImRect face_box = bounds(face);
+    CaseLayer front = case_layer(CASE_SOLID, translated(face, ImVec2(0, KB_FRONT_DEPTH * k)));
+    shade_vertically(front, KB_FRONT_TOP, KB_FRONT_BOTTOM);
+    front.height = KB_FRONT_RELIEF * k;
+    front.radius = KB_FRONT_RELIEF * k;
+    scene.layers.push_back(front);
+    CaseLayer seam = case_layer(CASE_GROOVE, translated(face, ImVec2(0, KB_FRONT_SEAM * k)));
+    seam.edges = ImRect(face_box.Min.x - k, face_box.Max.y + (KB_FRONT_SEAM - KB_BOTTOM_RADIUS) * k, face_box.Max.x + k, FLT_MAX);
+    seam.radius = KB_SEAM_WIDTH * k;
+    seam.base = (KB_FRONT_RELIEF - KB_SEAM_DEPTH) * k;
+    scene.layers.push_back(seam);
+    CaseLayer top = case_layer(CASE_SOLID, face);
+    shade_vertically(top, lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(152, 163, 171, 255), 0.35f));
+    top.base = front.height;
+    top.height = KB_FACE_RELIEF * k;
+    top.radius = KB_LIP * k;
+    scene.layers.push_back(top);
+    if (layout.compact) {
+        CaseLayer joint = case_layer(CASE_GROOVE, face);
+        joint.edges = ImRect(face_box.Min.x - k, -FLT_MAX, face_box.Max.x + k, face_box.Min.y + k);
+        joint.radius = JOINT_GROOVE_WIDTH * u;
+        joint.base = JOINT_GROOVE_FLOOR * u;
+        scene.layers.push_back(joint);
+        return;
+    }
+    Shape left, right, middle;
+    ImRect span;
+    hinge_span(layout, left, right, middle, span);
+    ImRect arch(bounds(middle).Min.x, -FLT_MAX, bounds(middle).Max.x, span.Max.y - 0.5f * u);
+    CaseLayer rise = case_layer(CASE_RAISE, face);
+    rise.edges = arch;
+    rise.radius = ARCH_RISE_WIDTH * u;
+    rise.height = ARCH_RISE * u;
+    scene.layers.push_back(rise);
+    CaseLayer groove = case_layer(CASE_GROOVE, face);
+    groove.edges = arch;
+    groove.radius = ARCH_GROOVE_WIDTH * u;
+    groove.base = ARCH_GROOVE_FLOOR * u;
+    groove.tint = ARCH_GROOVE_SHADE;
+    groove.outside_only = true;
+    scene.layers.push_back(groove);
+}
+
+CaseScene case_scene(const DeviceLayout &layout, const DeviceState &state, float scale) {
+    CaseScene scene;
+    scene.scale = scale;
+    if (layout.has_keyboard && !layout.compact) add_hinge(scene, layout);
+    if (layout.has_keyboard) add_keyboard(scene, layout);
+    ImRect box(layout.device_min, layout.device_max);
+    for (const CaseLayer &layer : scene.layers) box.Add(bounds(layer.outline));
+    ImVec2 margin(CASE_MARGIN, CASE_MARGIN);
+    scene.origin = ImVec2(floorf((box.Min.x - margin.x) * scale), floorf((box.Min.y - margin.y) * scale)) / scale;
+    scene.width = (int)ceilf((box.Max.x + margin.x - scene.origin.x) * scale);
+    scene.height = (int)ceilf((box.Max.y + margin.y - scene.origin.y) * scale);
+    scene.wear = state.wear;
+    scene.grime_scale = scale * layout.u;
+    scene.wear_area = box;
+    scene.scratches = scratch_alpha.empty() ? nullptr : scratch_alpha.data();
+    scene.scratch_width = scratch_w;
+    scene.scratch_height = scratch_h;
+    scene.scratch_tint = CASE_SCRATCH_TINT;
+    return scene;
+}
+
+void raster_case(SDL_Renderer *renderer, const CaseScene &scene) {
+    case_raster(scene, case_pixels);
+    if (scene.width <= 0 || scene.height <= 0) return;
+    if (!case_texture || case_texture->w != scene.width || case_texture->h != scene.height) {
+        if (case_texture) SDL_DestroyTexture(case_texture);
+        case_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, scene.width, scene.height);
+        if (!case_texture) return;
+        SDL_SetTextureScaleMode(case_texture, SDL_SCALEMODE_NEAREST);
+        SDL_SetTextureBlendMode(case_texture, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+    }
+    SDL_UpdateTexture(case_texture, nullptr, case_pixels.data(), scene.width * 4);
+    case_texture_min = scene.origin;
+    case_texture_scale = scene.scale;
+}
+
+void show_case(ImDrawList *draw) {
+    if (!case_texture) return;
+    draw->AddImage((ImTextureID)(intptr_t)case_texture, case_texture_min,
+                   case_texture_min + ImVec2((float)case_texture->w, (float)case_texture->h) / case_texture_scale);
 }
 
 void paint_case(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_scale, const DeviceLayout &layout, const DeviceState &state) {
@@ -1894,7 +1832,6 @@ void paint_case(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_scal
     float u = layout.u, rounding = layout.rounding;
     Shape lid_outline = state.show_keys ? lid_body(layout) : Shape();
     if (state.show_keys) fill_polygon(draw, translated(lid_outline, ImVec2(0, 4)), IM_COL32(0, 0, 0, 90), lid_indices(LID_SHAPE_BODY));
-    if (layout.has_keyboard && !layout.compact) draw_hinge_barrel(draw, layout);
     Shape body = state.show_keys ? lid_body(layout) : Shape();
     if (state.focused && !state.borderless) {
         if (state.show_keys) {
@@ -1967,7 +1904,6 @@ void paint_case(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_scal
                 }
             }
         }
-        if (layout.has_keyboard && !layout.compact) draw_hinge_caps(draw, layout);
     } else {
         draw->AddRect(device_min, device_max, BEZEL_EDGE, rounding, 0, 2.0f);
         draw->AddRect(device_min + ImVec2(2, 2), device_max - ImVec2(2, 2), BEZEL_LIGHT, rounding - 2, 0, 1.0f);
@@ -1989,11 +1925,7 @@ void paint_case(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_scal
     draw->AddRectFilled(image_min - ImVec2(2, 2), image_max + ImVec2(2, 2), IM_COL32(58, 64, 68, 255), 3.0f);
     if (state.show_keys) {
         paint_lid_wells(draw, Frame{ image_min, image_max, u }, device_min, device_max);
-        if (layout.has_keyboard) {
-            float hinge_top;
-            ImRect hinge = keyboard_hinge_span(layout, hinge_top);
-            paint_keybed(draw, keyboard_frame(layout), keyboard_body(layout), hinge, hinge_top, layout.compact, state.wear);
-        }
+        if (layout.has_keyboard) paint_keybed(draw, keyboard_frame(layout), keyboard_body(layout));
     }
 }
 
@@ -2108,7 +2040,13 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
     CaseKey case_key = { origin, ImVec2(avail_w, height), framebuffer_scale, state.show_keys, has_keyboard, state.wear, ring, layout.compact, model_name };
     OverlayKey overlay_key = { case_key, down };
     ImDrawList *draw = ImGui::GetWindowDrawList();
-    if (bake_current(case_bake) && case_key == baked_case) {
+    bool case_stale = !(bake_current(case_bake) && case_key == baked_case);
+    if (case_stale) {
+        load_scratches(renderer);
+        raster_case(renderer, case_scene(layout, state, framebuffer_scale));
+    }
+    show_case(draw);
+    if (!case_stale) {
         show_bake(case_bake, draw);
     } else {
         paint_case(begin_bake(case_bake, draw, origin, ImVec2(avail_w, height), framebuffer_scale), renderer, framebuffer_scale, layout, state);
@@ -2182,6 +2120,8 @@ void device_shutdown(void) {
     grime_texture = nullptr;
     if (scratch_texture) SDL_DestroyTexture(scratch_texture);
     scratch_texture = nullptr;
+    if (case_texture) SDL_DestroyTexture(case_texture);
+    case_texture = nullptr;
     destroy_bake(case_bake);
     destroy_bake(overlay_bake);
 }

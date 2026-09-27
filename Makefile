@@ -29,6 +29,7 @@ SRC_OBJC = src/menu_macos.m
 SRC_APP_CXX = \
 	src/main.cpp \
 	src/device.cpp \
+	src/case_raster.cpp \
 	src/browser.cpp \
 	src/firmware.cpp \
 	src/console.cpp
