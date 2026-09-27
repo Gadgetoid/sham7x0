@@ -1694,57 +1694,34 @@ void record_case(const DeviceLayout &layout) {
     case_regions.push_back({ keyboard, (KB_TOP_RADIUS + 3) * keyboard_frame(layout).kbu });
 }
 
-Shape silhouette(const std::vector<Shape> &parts, float margin) {
-    ImRect box = bounds(parts[0]);
-    for (const Shape &part : parts) box.Add(bounds(part));
-    Shape left_side, right_side;
-    for (float y = box.Min.y; y <= box.Max.y; y += 1.0f) {
-        float lo = FLT_MAX, hi = -FLT_MAX;
-        float row = std::min(std::max(y, box.Min.y + 0.01f), box.Max.y - 0.01f);
-        for (const Shape &part : parts) {
-            for (size_t i = 0; i < part.size(); i++) {
-                ImVec2 a = part[i], b = part[(i + 1) % part.size()];
-                if ((a.y <= row) != (b.y <= row)) {
-                    float x = a.x + (row - a.y) * (b.x - a.x) / (b.y - a.y);
-                    lo = std::min(lo, x);
-                    hi = std::max(hi, x);
-                }
-            }
-        }
-        if (lo > hi) continue;
-        left_side.push_back(ImVec2(lo, y));
-        right_side.push_back(ImVec2(hi, y));
+float corner_radius(const Shape &shape, ImVec2 corner) {
+    float nearest = FLT_MAX;
+    for (const ImVec2 &point : shape) {
+        ImVec2 d = point - corner;
+        nearest = std::min(nearest, d.x * d.x + d.y * d.y);
     }
-    const float radius = 14.0f;
-    const int reach = (int)radius;
-    int count = (int)left_side.size();
-    auto close = [&](Shape &side, float sign) {
-        Shape dilated = side, closed = side;
-        for (int i = 0; i < count; i++) {
-            for (int j = std::max(0, i - reach); j <= std::min(count - 1, i + reach); j++) {
-                float d = (float)(i - j);
-                float bulge = sqrtf(std::max(0.0f, radius * radius - d * d));
-                float x = side[j].x + sign * bulge;
-                if (sign > 0 ? x > dilated[i].x : x < dilated[i].x) dilated[i].x = x;
-            }
-        }
-        for (int i = 0; i < count; i++) {
-            closed[i].x = dilated[i].x - sign * radius;
-            for (int j = std::max(0, i - reach); j <= std::min(count - 1, i + reach); j++) {
-                float d = (float)(i - j);
-                float bulge = sqrtf(std::max(0.0f, radius * radius - d * d));
-                float x = dilated[j].x - sign * bulge;
-                if (sign > 0 ? x < closed[i].x : x > closed[i].x) closed[i].x = x;
-            }
-            if (sign > 0 ? closed[i].x < side[i].x : closed[i].x > side[i].x) closed[i].x = side[i].x;
-        }
-        side = closed;
-    };
-    close(left_side, -1.0f);
-    close(right_side, 1.0f);
-    Shape outline = right_side;
-    for (auto it = left_side.rbegin(); it != left_side.rend(); ++it) outline.push_back(*it);
-    return outset(outline, margin);
+    return sqrtf(nearest) / (sqrtf(2.0f) - 1.0f);
+}
+
+Shape silhouette(const Shape &top, const Shape &bottom, const std::vector<Shape> &parts, float margin) {
+    ImRect box = bounds(top);
+    box.Add(bounds(bottom));
+    for (const Shape &part : parts) box.Add(bounds(part));
+    ImRect upper = bounds(top), lower = bounds(bottom);
+    float radii[4] = { corner_radius(top, upper.Min), corner_radius(top, ImVec2(upper.Max.x, upper.Min.y)),
+                       corner_radius(bottom, lower.Max), corner_radius(bottom, ImVec2(lower.Min.x, lower.Max.y)) };
+    ImVec2 a = box.Min - ImVec2(margin, margin), b = box.Max + ImVec2(margin, margin);
+    Shape outline;
+    float r;
+    r = radii[1] + margin;
+    add_arc(outline, ImVec2(b.x - r, a.y + r), r, IM_PI * 1.5f, IM_PI * 2.0f, 24);
+    r = radii[2] + margin;
+    add_arc(outline, ImVec2(b.x - r, b.y - r), r, 0, IM_PI * 0.5f, 24);
+    r = radii[3] + margin;
+    add_arc(outline, ImVec2(a.x + r, b.y - r), r, IM_PI * 0.5f, IM_PI, 24);
+    r = radii[0] + margin;
+    add_arc(outline, ImVec2(a.x + r, a.y + r), r, IM_PI, IM_PI * 1.5f, 24);
+    return outline;
 }
 
 void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_scale, const DeviceLayout &layout, const DeviceState &state,
@@ -1758,11 +1735,12 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     Shape body = state.show_keys ? lid_body(layout) : Shape();
     if (state.focused && !state.borderless) {
         if (state.show_keys) {
-            std::vector<Shape> parts = { body };
+            std::vector<Shape> parts;
+            Shape bottom = body;
             if (layout.has_keyboard) {
                 Shape face = keyboard_body(layout);
                 parts.push_back(face);
-                parts.push_back(translated(face, ImVec2(0, KB_FRONT_DEPTH * keyboard_frame(layout).kbu)));
+                bottom = translated(face, ImVec2(0, KB_FRONT_DEPTH * keyboard_frame(layout).kbu));
                 if (!layout.compact) {
                     Shape left, right, middle;
                     ImRect span;
@@ -1772,7 +1750,7 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
                     parts.push_back(middle);
                 }
             }
-            Shape ring = silhouette(parts, 3.0f);
+            Shape ring = silhouette(body, bottom, parts, 3.0f);
             draw->AddPolyline(ring.data(), (int)ring.size(), IM_COL32(90, 200, 180, 160), ImDrawFlags_Closed, 2.0f);
         } else {
             draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
@@ -1796,13 +1774,35 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
                                   IM_COL32(255, 255, 255, 40), IM_COL32(255, 255, 255, 40), IM_COL32(255, 255, 255, 0), IM_COL32(255, 255, 255, 0));
     if (state.show_keys) {
         draw->AddPolyline(body.data(), (int)body.size(), BEZEL_EDGE, ImDrawFlags_Closed, 2.0f);
-        Shape inner = inset(body, 2.0f);
-        ImRect box = bounds(inner);
-        float band = LID_BODY_RADIUS * u;
-        for (size_t i = 0; i < inner.size(); i++) {
-            ImVec2 a = inner[i], b = inner[(i + 1) % inner.size()];
-            float t = std::min(1.0f, std::max(0.0f, ((a.y + b.y) * 0.5f - (box.Max.y - band)) / band));
-            if (t > 0) draw->AddLine(a, b, faded(BEZEL_LIGHT, t * t), 1.0f);
+        if (layout.has_keyboard && !layout.compact) {
+            Shape left, right, middle;
+            ImRect span;
+            hinge_span(layout, left, right, middle, span);
+            ImRect box = bounds(body);
+            float band = 10.0f * u;
+            const int columns = 24, rows = 8;
+            ImVec2 uv = draw->_Data->TexUvWhitePixel;
+            for (const Shape *cap : { &left, &right }) {
+                ImRect under = bounds(*cap);
+                draw->PrimReserve(columns * rows * 6, (columns + 1) * (rows + 1));
+                ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
+                for (int row = 0; row <= rows; row++) {
+                    for (int column = 0; column <= columns; column++) {
+                        ImVec2 point(under.Min.x + under.GetWidth() * column / columns, box.Max.y - band + band * row / rows);
+                        float t = (float)row / rows;
+                        float edge = std::min(point.x - under.Min.x, under.Max.x - point.x) / (under.GetWidth() * 0.3f);
+                        float inside = point_in(body, point - ImVec2(0, 0.5f)) ? 1.0f : 0.0f;
+                        draw->PrimWriteVtx(point, uv, IM_COL32(246, 250, 252, (int)(140 * t * t * inside * std::max(0.0f, std::min(1.0f, edge)))));
+                    }
+                }
+                for (int row = 0; row < rows; row++) {
+                    for (int column = 0; column < columns; column++) {
+                        ImDrawIdx i = (ImDrawIdx)(base + row * (columns + 1) + column);
+                        draw->PrimWriteIdx(i); draw->PrimWriteIdx((ImDrawIdx)(i + 1)); draw->PrimWriteIdx((ImDrawIdx)(i + columns + 2));
+                        draw->PrimWriteIdx(i); draw->PrimWriteIdx((ImDrawIdx)(i + columns + 2)); draw->PrimWriteIdx((ImDrawIdx)(i + columns + 1));
+                    }
+                }
+            }
         }
         if (layout.has_keyboard && !layout.compact) draw_hinge_caps(draw, layout);
     } else {
