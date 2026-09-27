@@ -292,167 +292,18 @@ float smoothstep(float t) {
     return t * t * (3 - 2 * t);
 }
 
-struct RecessStyle {
-    float outer;
-    float inner;
-    float flatness;
-};
-
-struct Mask {
-    float from = 0;
-    float to = 0;
-
-    float at(float x) const {
-        return from != to ? smoothstep((x - from) / (to - from)) : 1.0f;
-    }
-};
-
-const RecessStyle FLUTE_RECESS = { 1.4f, 7.0f, 0.15f };
-const RecessStyle KEY_WELL = { 1.1f, 5.5f, 0.3f };
-const RecessStyle FLAT_WELL = { 0.9f, 4.5f, 1.0f };
-
-struct RecessPalette {
-    ImU32 shade;
-    ImU32 lit;
-    ImU32 bowl_top;
-    ImU32 bowl_bottom;
-    ImU32 floor;
-};
-
-const RecessPalette LID_RECESS = { IM_COL32(104, 112, 118, 255), IM_COL32(238, 242, 246, 255), IM_COL32(146, 154, 160, 255),
-                                   IM_COL32(188, 195, 199, 255), IM_COL32(178, 186, 191, 255) };
-const RecessPalette FINGER_SCOOP = { IM_COL32(66, 76, 84, 255), IM_COL32(214, 224, 230, 255), IM_COL32(84, 96, 104, 255),
-                                     IM_COL32(138, 150, 158, 255), IM_COL32(120, 132, 140, 255) };
-const ImU32 SLOPE_SHADE = IM_COL32(78, 86, 92, 255);
-const ImU32 SLOPE_LIT = IM_COL32(236, 240, 242, 255);
 const float KEY_HOLE_GAP = 2.2f;
 const float HOMING_DROP = 0.4f;
 const float KEY_REFERENCE_H = 36.6f;
 const float KEYCAP_LEGEND_ALPHA = 0.76f;
 const float HOMING_HALF_W = 8.4f;
 const float HOMING_HALF_H = 2.25f;
-const float KEY_HOLE_EDGE_WIDTH = 1.1f;
 const ImU32 KEY_HOLE_DARK = IM_COL32(14, 16, 18, 255);
-const ImU32 KEY_HOLE_EDGE = IM_COL32(236, 240, 242, 230);
-const RecessStyle SCOOP_RECESS = { 1.0f, 7.0f, 0.0f };
 
 ImU32 mix(ImU32 a, ImU32 b, float t) {
     t = std::max(0.0f, std::min(1.0f, t));
     auto channel = [&](int shift) { return (int)(((a >> shift) & 0xff) * (1 - t) + ((b >> shift) & 0xff) * t); };
     return IM_COL32(channel(IM_COL32_R_SHIFT), channel(IM_COL32_G_SHIFT), channel(IM_COL32_B_SHIFT), channel(IM_COL32_A_SHIFT));
-}
-
-void draw_slope_ring(ImDrawList *draw, ImVec2 centre, float radius, float slope, ImU32 floor) {
-    const int segments = 96;
-    draw->PrimReserve(segments * 6, segments * 2);
-    ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
-    ImVec2 uv = draw->_Data->TexUvWhitePixel;
-    for (int i = 0; i < segments; i++) {
-        float angle = 2 * IM_PI * i / segments;
-        ImVec2 normal(cosf(angle), sinf(angle));
-        ImU32 colour = normal.y < 0 ? mix(floor, SLOPE_SHADE, powf(-normal.y, 0.7f)) : mix(floor, SLOPE_LIT, powf(normal.y, 0.7f) * 0.85f);
-        draw->PrimWriteVtx(centre + normal * radius, uv, colour);
-        draw->PrimWriteVtx(centre + normal * (radius - slope), uv, colour);
-    }
-    for (int i = 0; i < segments; i++) {
-        ImDrawIdx a = (ImDrawIdx)(base + i * 2), b = (ImDrawIdx)(base + ((i + 1) % segments) * 2);
-        draw->PrimWriteIdx(a); draw->PrimWriteIdx(b); draw->PrimWriteIdx((ImDrawIdx)(b + 1));
-        draw->PrimWriteIdx(a); draw->PrimWriteIdx((ImDrawIdx)(b + 1)); draw->PrimWriteIdx((ImDrawIdx)(a + 1));
-    }
-    Shape rim;
-    for (int i = 0; i < segments; i++) {
-        float angle = 2 * IM_PI * i / segments;
-        rim.push_back(centre + ImVec2(cosf(angle), sinf(angle)) * radius);
-    }
-    draw->AddPolyline(rim.data(), (int)rim.size(), IM_COL32(80, 88, 94, 90), ImDrawFlags_Closed, 0.6f);
-}
-
-std::vector<int> ear_clip(const Shape &polygon) {
-    std::vector<int> result;
-    std::vector<int> indices;
-    for (int i = 0; i < (int)polygon.size(); i++) indices.push_back(i);
-    float orientation = signed_area(polygon) > 0 ? 1.0f : -1.0f;
-    auto turn = [&](ImVec2 a, ImVec2 b, ImVec2 c) { return ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) * orientation; };
-    while (indices.size() > 3) {
-        int count = (int)indices.size();
-        int ear = -1;
-        for (int k = 0; k < count && ear < 0; k++) {
-            ImVec2 a = polygon[indices[(k + count - 1) % count]], b = polygon[indices[k]], c = polygon[indices[(k + 1) % count]];
-            if (turn(a, b, c) <= 0) continue;
-            bool empty = true;
-            for (int j = 0; j < count && empty; j++) {
-                int other = indices[j];
-                if (j == k || j == (k + 1) % count || j == (k + count - 1) % count) continue;
-                ImVec2 p = polygon[other];
-                if ((p.x == a.x && p.y == a.y) || (p.x == b.x && p.y == b.y) || (p.x == c.x && p.y == c.y)) continue;
-                empty = !(turn(a, b, p) >= 0 && turn(b, c, p) >= 0 && turn(c, a, p) >= 0);
-            }
-            if (empty) ear = k;
-        }
-        if (ear < 0) ear = 0;
-        result.push_back(indices[(ear + count - 1) % count]);
-        result.push_back(indices[ear]);
-        result.push_back(indices[(ear + 1) % count]);
-        indices.erase(indices.begin() + ear);
-    }
-    if (indices.size() == 3) result.insert(result.end(), indices.begin(), indices.end());
-    return result;
-}
-
-void draw_recess(ImDrawList *draw, const Shape &shape, const RecessStyle &style, float u, Mask mask = Mask(),
-                 const RecessPalette &palette = LID_RECESS) {
-    const int inner_rings = 6;
-    size_t count = shape.size();
-    ImRect box = bounds(shape);
-    float outward = bounds(grown(shape, 1.0f)).GetWidth() > box.GetWidth() ? -1.0f : 1.0f;
-    std::vector<ImVec2> normals(count);
-    std::vector<float> facing(count);
-    for (size_t i = 0; i < count; i++) {
-        ImVec2 tangent = shape[(i + 1) % count] - shape[(i + count - 1) % count];
-        float length = sqrtf(tangent.x * tangent.x + tangent.y * tangent.y);
-        normals[i] = length > 0 ? ImVec2(tangent.y, -tangent.x) * (outward / length) : ImVec2(0, 0);
-        facing[i] = smoothstep((normals[i].y + 1.0f) * 0.5f);
-    }
-    auto floor_colour = [&](ImVec2 point) {
-        float t = box.GetHeight() > 0 ? (point.y - box.Min.y) / box.GetHeight() : 0.5f;
-        return mix(mix(palette.bowl_top, palette.bowl_bottom, t), palette.floor, style.flatness);
-    };
-    auto shaded = [&](ImU32 colour, ImVec2 point) { return faded(colour, mask.at(point.x)); };
-
-    const int rings = inner_rings + 2;
-    float inner = style.inner * u;
-    draw->PrimReserve((int)count * (rings - 1) * 6 + ((int)count - 2) * 3, (int)count * rings + (int)count);
-    ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
-    ImVec2 uv = draw->_Data->TexUvWhitePixel;
-    for (size_t i = 0; i < count; i++) {
-        ImU32 wall = mix(palette.shade, palette.lit, facing[i]);
-        ImVec2 edge = shape[i];
-        ImVec2 outer_point = edge + normals[i] * (style.outer * u);
-        draw->PrimWriteVtx(outer_point, uv, shaded(wall, outer_point) & ~IM_COL32_A_MASK);
-        draw->PrimWriteVtx(edge, uv, shaded(wall, edge));
-        for (int ring = 1; ring <= inner_rings; ring++) {
-            float t = (float)ring / inner_rings;
-            ImVec2 point = edge - normals[i] * (inner * t);
-            draw->PrimWriteVtx(point, uv, shaded(mix(wall, floor_colour(point), smoothstep(t)), point));
-        }
-    }
-    for (size_t i = 0; i < count; i++) {
-        ImDrawIdx a = (ImDrawIdx)(base + i * rings), b = (ImDrawIdx)(base + ((i + 1) % count) * rings);
-        for (int ring = 0; ring < rings - 1; ring++) {
-            draw->PrimWriteIdx((ImDrawIdx)(a + ring)); draw->PrimWriteIdx((ImDrawIdx)(b + ring)); draw->PrimWriteIdx((ImDrawIdx)(b + ring + 1));
-            draw->PrimWriteIdx((ImDrawIdx)(a + ring)); draw->PrimWriteIdx((ImDrawIdx)(b + ring + 1)); draw->PrimWriteIdx((ImDrawIdx)(a + ring + 1));
-        }
-    }
-    ImDrawIdx centre = (ImDrawIdx)draw->_VtxCurrentIdx;
-    Shape floor;
-    for (size_t i = 0; i < count; i++) {
-        ImVec2 point = shape[i] - normals[i] * inner;
-        floor.push_back(point);
-        draw->PrimWriteVtx(point, uv, shaded(floor_colour(point), point));
-    }
-    std::vector<int> triangles = ear_clip(floor);
-    for (int index : triangles) draw->PrimWriteIdx((ImDrawIdx)(centre + index));
-    for (size_t i = triangles.size(); i < (count - 2) * 3; i++) draw->PrimWriteIdx(centre);
 }
 
 ImU32 lighten(ImU32 colour, int amount) {
@@ -714,26 +565,6 @@ void input_lid_keys(const Frame &frame, DeviceState &state, uint8_t *down) {
     down[LID_ENTER] = pressed;
 }
 
-void paint_lid_wells(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImVec2 device_max) {
-    float u = frame.u;
-    LidLayout lid = lid_layout(frame);
-    draw->PushClipRect(device_min, device_max, true);
-    for (int index = 0; index < 5; index++) {
-        const ImRect &box = lid.side_boxes[index];
-        ImRect scoop = bounds(lid.flute[index]);
-        draw_recess(draw, lid.flute[index], FLUTE_RECESS, u, Mask{ scoop.Min.x, box.Min.x + box.GetHeight() * 0.2f });
-    }
-    {
-        ImRect scoop = bounds(lid.power_flute);
-        draw_recess(draw, lid.power_flute, FLUTE_RECESS, u, Mask{ scoop.Max.x, lid.power_box.Max.x - lid.power_box.GetHeight() * 0.2f });
-    }
-    draw_recess(draw, lid.arrow_well, KEY_WELL, u);
-    draw->PopClipRect();
-    draw_recess(draw, pill(lid.light_box.Min - ImVec2(WELL_MARGIN, WELL_MARGIN) * u, lid.light_box.Max + ImVec2(WELL_MARGIN, WELL_MARGIN) * u), KEY_WELL, u);
-    draw_recess(draw, lid.menu_well, KEY_WELL, u);
-    draw_recess(draw, lid.esc_well, FLAT_WELL, u);
-}
-
 void paint_lid_keys(ImDrawList *draw, const Frame &frame, const uint8_t *down) {
     float u = frame.u;
     ImVec2 press(0, 1.2f * u);
@@ -880,34 +711,6 @@ Shape cursor_outline(float length, float breadth) {
         local.push_back(ImVec2(-length * 0.5f + point.y / height * length, -breadth * 0.5f + point.x / width * breadth));
     }
     return local;
-}
-
-template <typename ColourAt>
-void ring_mesh(ImDrawList *draw, const Shape &shape, const std::vector<float> &offsets, ColourAt colour_at) {
-    size_t count = shape.size();
-    float outward = bounds(grown(shape, 1.0f)).GetWidth() > bounds(shape).GetWidth() ? -1.0f : 1.0f;
-    std::vector<ImVec2> normals(count);
-    for (size_t i = 0; i < count; i++) {
-        ImVec2 tangent = shape[(i + 1) % count] - shape[(i + count - 1) % count];
-        float length = sqrtf(tangent.x * tangent.x + tangent.y * tangent.y);
-        normals[i] = length > 0 ? ImVec2(tangent.y, -tangent.x) * (outward / length) : ImVec2(0, 0);
-    }
-    int rings = (int)offsets.size();
-    draw->PrimReserve((int)count * (rings - 1) * 6, (int)count * rings);
-    ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
-    ImVec2 uv = draw->_Data->TexUvWhitePixel;
-    for (size_t i = 0; i < count; i++) {
-        for (int ring = 0; ring < rings; ring++) {
-            draw->PrimWriteVtx(shape[i] + normals[i] * offsets[ring], uv, colour_at(normals[i], ring));
-        }
-    }
-    for (size_t i = 0; i < count; i++) {
-        ImDrawIdx a = (ImDrawIdx)(base + i * rings), b = (ImDrawIdx)(base + ((i + 1) % count) * rings);
-        for (int ring = 0; ring < rings - 1; ring++) {
-            draw->PrimWriteIdx((ImDrawIdx)(a + ring)); draw->PrimWriteIdx((ImDrawIdx)(b + ring)); draw->PrimWriteIdx((ImDrawIdx)(b + ring + 1));
-            draw->PrimWriteIdx((ImDrawIdx)(a + ring)); draw->PrimWriteIdx((ImDrawIdx)(b + ring + 1)); draw->PrimWriteIdx((ImDrawIdx)(a + ring + 1));
-        }
-    }
 }
 
 struct KeyboardFrame {
@@ -1104,20 +907,6 @@ ImU32 scaled_colour(ImU32 colour, float k, float sheen = 0.0f) {
     return IM_COL32(channel(r), channel(g), channel(b), 255);
 }
 
-void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face) {
-    float k = frame.kbu;
-    ImRect face_box = bounds(face);
-    float finger_y = (face_box.Max.y - frame.origin.y) / k + KB_FINGER_Y - KB_HEIGHT;
-    draw_recess(draw, pill(frame.at(KB_FINGER_X - KB_FINGER_W * 0.5f, finger_y - KB_FINGER_H * 0.5f),
-                           frame.at(KB_FINGER_X + KB_FINGER_W * 0.5f, finger_y + KB_FINGER_H * 0.5f)),
-                SCOOP_RECESS, k, Mask(), FINGER_SCOOP);
-    {
-        ImVec2 centre = frame.at(KB_WELL_X, KB_WELL_Y);
-        ImU32 shell = mix(lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(152, 163, 171, 255), 0.35f), 0.8f);
-        draw_slope_ring(draw, centre, KB_WELL_R * k, KB_WELL_SLOPE * k, shell);
-    }
-}
-
 const int KEYBOARD_KEY_COUNT = (int)(sizeof keyboard_keys / sizeof keyboard_keys[0]);
 
 void input_keyboard(const KeyboardFrame &frame, DeviceState &state, uint8_t *down) {
@@ -1155,26 +944,6 @@ Shape traced_points(const KeyboardFrame &frame, const float *points, int count, 
     Shape shape;
     for (int i = 0; i < count; i++) shape.push_back(frame.at(points[i * 2], points[i * 2 + 1]) + offset);
     return shape;
-}
-
-void draw_key_hole(ImDrawList *draw, const Shape &hole, float k) {
-    fill(draw, hole, KEY_HOLE_DARK, KEY_HOLE_DARK);
-    size_t count = hole.size();
-    for (size_t i = 0; i < count; i++) {
-        ImVec2 a = hole[i], b = hole[(i + 1) % count];
-        ImVec2 edge = b - a;
-        float length = sqrtf(edge.x * edge.x + edge.y * edge.y);
-        if (length <= 0) continue;
-        float facing = -edge.x / length;
-        if (facing <= 0) continue;
-        draw->AddLine(a, b, faded(KEY_HOLE_EDGE, powf(facing, 1.5f)), KEY_HOLE_EDGE_WIDTH * k);
-    }
-}
-
-void paint_keybed(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face) {
-    float k = frame.kbu;
-    draw_keybed(draw, frame, face);
-    for (const KeyboardKey &key : keyboard_keys) draw_key_hole(draw, outset(keyboard_key_shape(frame, key), KEY_HOLE_GAP * k), k);
 }
 
 void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const DeviceState &state, const uint8_t *down) {
@@ -1532,6 +1301,23 @@ const float SCREEN_WALL = 6.0f;
 const float SCREEN_DEPTH = 3.0f;
 const ImU32 LCD_SURROUND = IM_COL32(58, 64, 68, 255);
 const ImU32 HINGE_GAP = IM_COL32(24, 28, 30, 255);
+const float FLUTE_WALL = 0.5f;
+const float FLUTE_DEPTH = 7.0f;
+const float KEY_WELL_WALL = 5.5f;
+const float KEY_WELL_DEPTH = 3.0f;
+const float FLAT_WELL_WALL = 4.5f;
+const float FLAT_WELL_DEPTH = 4.5f;
+const ImU32 WELL_TOP = IM_COL32(166, 174, 180, 255);
+const ImU32 WELL_BOTTOM = IM_COL32(184, 191, 196, 255);
+const ImU32 WELL_FLOOR = IM_COL32(178, 186, 191, 255);
+const float WELL_TINT = 0.6f;
+const float SCOOP_DEPTH = 4.0f;
+const ImU32 SCOOP_TOP = IM_COL32(84, 96, 104, 255);
+const ImU32 SCOOP_BOTTOM = IM_COL32(138, 150, 158, 255);
+const float SCOOP_TINT = 0.7f;
+const float CURSOR_WELL_DEPTH = 5.0f;
+const float KEY_HOLE_CHAMFER = 0.9f;
+const float KEY_HOLE_DEPTH = 5.0f;
 
 SDL_Texture *case_texture = nullptr;
 ImVec2 case_texture_min;
@@ -1702,6 +1488,62 @@ void add_gap(CaseScene &scene, const DeviceLayout &layout) {
     scene.layers.push_back(gap);
 }
 
+CaseLayer recess_layer(const Shape &outline, CaseRecessShape shape, float wall, float depth, ImU32 top, ImU32 bottom, float tint) {
+    CaseLayer recess = case_layer(CASE_RECESS, outline);
+    shade_vertically(recess, top, bottom);
+    recess.shape = shape;
+    recess.radius = wall;
+    recess.height = depth;
+    recess.tint = tint;
+    return recess;
+}
+
+void add_lid_wells(CaseScene &scene, const DeviceLayout &layout) {
+    float u = layout.u;
+    LidLayout lid = lid_layout(Frame{ layout.image_min, layout.image_max, u });
+    for (int index = 0; index < 6; index++) {
+        const Shape &flute = index < 5 ? lid.flute[index] : lid.power_flute;
+        ImRect scoop = bounds(flute);
+        CaseLayer recess = recess_layer(flute, CASE_TROUGH, scoop.GetHeight() * FLUTE_WALL, FLUTE_DEPTH * u, WELL_TOP, WELL_BOTTOM, WELL_TINT);
+        if (index < 5) {
+            const ImRect &key = lid.side_boxes[index];
+            recess.fade_from = scoop.Min.x;
+            recess.fade_to = key.Min.x + key.GetHeight() * 0.2f;
+        } else {
+            recess.fade_from = scoop.Max.x;
+            recess.fade_to = lid.power_box.Max.x - lid.power_box.GetHeight() * 0.2f;
+        }
+        scene.layers.push_back(recess);
+    }
+    Shape light_well = pill(lid.light_box.Min - ImVec2(WELL_MARGIN, WELL_MARGIN) * u, lid.light_box.Max + ImVec2(WELL_MARGIN, WELL_MARGIN) * u);
+    for (const Shape *well : { &lid.arrow_well, &light_well, &lid.menu_well }) {
+        scene.layers.push_back(recess_layer(*well, CASE_BOWL, KEY_WELL_WALL * u, KEY_WELL_DEPTH * u, WELL_TOP, WELL_BOTTOM, WELL_TINT));
+    }
+    scene.layers.push_back(recess_layer(lid.esc_well, CASE_BOWL, FLAT_WELL_WALL * u, FLAT_WELL_DEPTH * u, WELL_FLOOR, WELL_FLOOR, WELL_TINT));
+}
+
+void add_keyboard_wells(CaseScene &scene, const DeviceLayout &layout) {
+    KeyboardFrame frame = keyboard_frame(layout);
+    float k = frame.kbu;
+    ImRect face = bounds(keyboard_body(layout));
+    float finger_y = (face.Max.y - frame.origin.y) / k + KB_FINGER_Y - KB_HEIGHT;
+    Shape scoop = pill(frame.at(KB_FINGER_X - KB_FINGER_W * 0.5f, finger_y - KB_FINGER_H * 0.5f),
+                       frame.at(KB_FINGER_X + KB_FINGER_W * 0.5f, finger_y + KB_FINGER_H * 0.5f));
+    scene.layers.push_back(recess_layer(scoop, CASE_TROUGH, KB_FINGER_H * 0.5f * k, SCOOP_DEPTH * k, SCOOP_TOP, SCOOP_BOTTOM, SCOOP_TINT));
+    Shape well;
+    add_arc(well, frame.at(KB_WELL_X, KB_WELL_Y), KB_WELL_R * k, 0, IM_PI * 2.0f, 96);
+    well.pop_back();
+    scene.layers.push_back(recess_layer(well, CASE_BOWL, KB_WELL_SLOPE * k, CURSOR_WELL_DEPTH * k, 0, 0, 0.0f));
+    for (const KeyboardKey &key : keyboard_keys) {
+        Shape shape = keyboard_key_shape(frame, key);
+        scene.layers.push_back(recess_layer(outset(shape, KEY_HOLE_GAP * k), CASE_SHARP, KEY_HOLE_CHAMFER * k, KEY_HOLE_CHAMFER * k, 0, 0, 0.0f));
+        CaseLayer hole = recess_layer(outset(shape, (KEY_HOLE_GAP - KEY_HOLE_CHAMFER) * k), CASE_SHARP, KEY_HOLE_CHAMFER * k, KEY_HOLE_DEPTH * k,
+                                      KEY_HOLE_DARK, KEY_HOLE_DARK, 1.0f);
+        hole.grime = false;
+        scene.layers.push_back(hole);
+    }
+}
+
 CaseScene case_scene(const DeviceLayout &layout, const DeviceState &state, float scale) {
     CaseScene scene;
     scene.scale = scale;
@@ -1709,7 +1551,9 @@ CaseScene case_scene(const DeviceLayout &layout, const DeviceState &state, float
         if (layout.has_keyboard && !layout.compact) add_gap(scene, layout);
         if (layout.has_keyboard && !layout.compact) add_hinge(scene, layout);
         if (layout.has_keyboard) add_keyboard(scene, layout);
+        if (layout.has_keyboard) add_keyboard_wells(scene, layout);
         add_lid(scene, layout);
+        add_lid_wells(scene, layout);
     } else {
         scene.layers.push_back(shell_layer(rounded_rect(layout.device_min, layout.device_max, layout.rounding), PLAIN_EDGE));
     }
@@ -1752,8 +1596,8 @@ void show_case(ImDrawList *draw) {
 }
 
 void paint_case(ImDrawList *draw, const DeviceLayout &layout, const DeviceState &state) {
-    ImVec2 device_min = layout.device_min, device_max = layout.device_max, image_min = layout.image_min, image_max = layout.image_max;
-    float u = layout.u, rounding = layout.rounding;
+    ImVec2 device_min = layout.device_min, device_max = layout.device_max;
+    float rounding = layout.rounding;
     if (state.focused && !state.borderless) {
         if (state.show_keys) {
             Shape body = lid_body(layout);
@@ -1777,10 +1621,6 @@ void paint_case(ImDrawList *draw, const DeviceLayout &layout, const DeviceState 
         } else {
             draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
         }
-    }
-    if (state.show_keys) {
-        paint_lid_wells(draw, Frame{ image_min, image_max, u }, device_min, device_max);
-        if (layout.has_keyboard) paint_keybed(draw, keyboard_frame(layout), keyboard_body(layout));
     }
 }
 
