@@ -1342,7 +1342,7 @@ void add_hinge(CaseScene &scene, const DeviceLayout &layout) {
     barrel.axis_top = span.Min.y;
     barrel.axis_bottom = span.Max.y;
     barrel.height = span.GetHeight() * HINGE_ROUNDNESS;
-    barrel.grime = false;
+    barrel.scratches = false;
     set_roll(barrel, layout);
     scene.layers.push_back(barrel);
     for (const Shape *cap : { &left, &right }) {

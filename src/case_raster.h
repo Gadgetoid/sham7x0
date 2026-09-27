@@ -35,6 +35,7 @@ struct CaseLayer {
     float ramp_from = 0;
     float ramp_to = 0;
     bool grime = true;
+    bool scratches = true;
 };
 
 struct CaseScene {

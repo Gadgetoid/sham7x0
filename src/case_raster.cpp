@@ -71,6 +71,7 @@ struct Surface {
     std::vector<ImU32> albedo;
     std::vector<float> alpha;
     std::vector<float> grime;
+    std::vector<float> scratchable;
 };
 
 struct Field {
@@ -331,6 +332,7 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
                     surface.albedo[index] = pack(blend(unpack(surface.albedo[index]), colour, cover / combined));
                     surface.alpha[index] = combined;
                     surface.grime[index] += ((layer.grime ? 1.0f : 0.0f) - surface.grime[index]) * cover;
+                    surface.scratchable[index] += ((layer.scratches ? 1.0f : 0.0f) - surface.scratchable[index]) * cover;
                 } else if (layer.kind == CASE_RECESS) {
                     if (distance <= -0.5f) continue;
                     float depth = recess_profile(layer.shape, radius > 0 ? (distance + 0.5f) / radius : 1.0f) * fade_at(layer, place, x);
@@ -530,6 +532,7 @@ void case_raster(const CaseScene &scene, std::vector<uint32_t> &pixels) {
     surface.albedo.assign(count, 0);
     surface.alpha.assign(count, 0.0f);
     surface.grime.assign(count, 0.0f);
+    surface.scratchable.assign(count, 0.0f);
     pixels.assign(count, 0);
     if (count == 0) return;
     Placement place{ scene.origin, scene.scale };
@@ -597,7 +600,7 @@ void case_raster(const CaseScene &scene, std::vector<uint32_t> &pixels) {
                             float wear_u = (place.logical_x(x) - scene.wear_area.Min.x) / wear_width;
                             float wear_v = (place.logical_y(y) - scene.wear_area.Min.y) / wear_width;
                             float scratch = scratch_at(scene, wear_u * 0.55f, wear_v * 0.55f * scene.scratch_width / scene.scratch_height);
-                            dirty = blend(dirty, scratch_colour, scratch * scratch_alpha);
+                            dirty = blend(dirty, scratch_colour, scratch * scratch_alpha * surface.scratchable[index]);
                         }
                         base = blend(base, dirty, grime);
                     }
