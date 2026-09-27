@@ -1253,7 +1253,7 @@ const float SHADOW_OFFSET = 4.0f;
 const float SHADOW_BLUR = 3.0f;
 const float SHADOW_ALPHA = 0.35f;
 const float HINGE_ROUNDNESS = 0.5f;
-const float CAP_END_ROUNDING = 0.45f;
+const float CAP_END_ROUNDING = 16.0f;
 const float CAP_GROOVE_WIDTH = 2.4f;
 const float CAP_GROOVE_DEPTH = 3.0f;
 const float CAP_GROOVE_SHADE = 0.35f;
@@ -1263,10 +1263,11 @@ const float KB_SEAM_WIDTH = 1.1f;
 const float KB_SEAM_DEPTH = 0.8f;
 const float KB_FACE_RELIEF = 1.2f;
 const float KB_FACE_EDGE = 3.0f;
-const float ARCH_BLEND = 13.0f;
-const float ARCH_SWEEP = 70.0f;
+const float ROLL_JOIN = 0.2f;
+const float ROLL_KEY_CLEARANCE = 14.0f;
 const float ARCH_GROOVE_WIDTH = 6.0f;
 const float ARCH_GROOVE_DEPTH = 6.0f;
+const float ARCH_GROOVE_TAPER = 14.0f;
 const float ARCH_GROOVE_SHADE = 0.0f;
 const float JOINT_GROOVE_WIDTH = 1.6f;
 const float JOINT_GROOVE_DEPTH = 1.5f;
@@ -1320,6 +1321,15 @@ void shade_vertically(CaseLayer &layer, ImU32 top, ImU32 bottom) {
     layer.gradient_bottom = box.Max.y;
 }
 
+void set_roll(CaseLayer &layer, const DeviceLayout &layout) {
+    KeyboardFrame frame = keyboard_frame(layout);
+    float key_top = FLT_MAX;
+    for (const KeyboardKey &key : keyboard_keys) key_top = std::min(key_top, key.y - key.h * 0.5f);
+    layer.roll_join = ROLL_JOIN;
+    layer.roll_end = frame.at(0, key_top - ROLL_KEY_CLEARANCE).y;
+    layer.roll_level = (KB_FRONT_RELIEF + KB_FACE_RELIEF) * frame.kbu;
+}
+
 void add_hinge(CaseScene &scene, const DeviceLayout &layout) {
     float u = layout.u;
     Shape left, right, middle;
@@ -1330,6 +1340,7 @@ void add_hinge(CaseScene &scene, const DeviceLayout &layout) {
     barrel.axis_bottom = span.Max.y;
     barrel.height = span.GetHeight() * HINGE_ROUNDNESS;
     barrel.grime = false;
+    set_roll(barrel, layout);
     scene.layers.push_back(barrel);
     for (const Shape *cap : { &left, &right }) {
         ImRect box = bounds(*cap);
@@ -1337,8 +1348,9 @@ void add_hinge(CaseScene &scene, const DeviceLayout &layout) {
         end.outline = *cap;
         end.top_colour = BEZEL;
         end.bottom_colour = BEZEL;
+        end.roll_end = 0;
         bool on_left = cap == &left;
-        end.radius = box.GetWidth() * CAP_END_ROUNDING;
+        end.radius = CAP_END_ROUNDING * u;
         end.edges = on_left ? ImRect(-FLT_MAX, -FLT_MAX, box.GetCenter().x, FLT_MAX) : ImRect(box.GetCenter().x, -FLT_MAX, FLT_MAX, FLT_MAX);
         scene.layers.push_back(end);
         CaseLayer groove = case_layer(CASE_GROOVE, *cap);
@@ -1386,18 +1398,17 @@ void add_keyboard(CaseScene &scene, const DeviceLayout &layout) {
     hinge_span(layout, left, right, middle, span);
     ImRect arch(bounds(middle).Min.x, -FLT_MAX, bounds(middle).Max.x, span.Max.y - 0.5f * u);
     CaseLayer rise = case_layer(CASE_RAISE, face);
-    rise.edges = arch;
-    rise.radius = ARCH_SWEEP * u;
-    rise.blend = ARCH_BLEND * u;
     rise.axis_top = span.Min.y;
     rise.axis_bottom = span.Max.y;
     rise.height = span.GetHeight() * HINGE_ROUNDNESS;
+    set_roll(rise, layout);
     scene.layers.push_back(rise);
     CaseLayer groove = case_layer(CASE_GROOVE, face);
     groove.edges = arch;
     groove.radius = ARCH_GROOVE_WIDTH * u;
     groove.height = ARCH_GROOVE_DEPTH * u;
     groove.tint = ARCH_GROOVE_SHADE;
+    groove.taper = ARCH_GROOVE_TAPER * u;
     scene.layers.push_back(groove);
 }
 

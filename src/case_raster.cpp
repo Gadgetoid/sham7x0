@@ -50,11 +50,6 @@ float quarter_round(float t) {
     return sqrtf(1.0f - (1.0f - t) * (1.0f - t));
 }
 
-float ease_out(float t) {
-    t = clamp01(t);
-    return 1.0f - (1.0f - t) * (1.0f - t);
-}
-
 void parallel_rows(int rows, const std::function<void(int, int)> &work) {
     int threads = std::max(1, std::min((int)std::thread::hardware_concurrency(), rows / 64));
     if (threads == 1) {
@@ -75,7 +70,7 @@ struct Surface {
     std::vector<float> relief;
     std::vector<ImU32> albedo;
     std::vector<float> alpha;
-    std::vector<uint8_t> grime;
+    std::vector<float> grime;
 };
 
 struct Field {
@@ -184,21 +179,6 @@ void soften_across(Field &field, int reach) {
     }
 }
 
-std::vector<float> top_edges(const Field &field) {
-    std::vector<float> tops(field.width, FLT_MAX);
-    for (int column = 0; column < field.width; column++) {
-        for (int row = 0; row < field.height; row++) {
-            float distance = field.distance[(size_t)row * field.width + column];
-            if (distance < 0) continue;
-            float above = row > 0 ? -field.distance[(size_t)(row - 1) * field.width + column] : 0.0f;
-            float crossing = distance + above > 0 ? distance / (distance + above) : 0.5f;
-            tops[column] = field.top + row + 0.5f - crossing;
-            break;
-        }
-    }
-    return tops;
-}
-
 Field signed_field(const std::vector<ImVec2> &outline, const ImRect &edges, float band, const Surface &surface, const ImRect *ends = nullptr) {
     Field field;
     field.band = band;
@@ -287,6 +267,27 @@ std::vector<ImVec2> smoothed(const std::vector<ImVec2> &outline, float spacing) 
     return result;
 }
 
+float hinge_profile(const CaseLayer &layer, float y, float scale) {
+    float centre = (layer.axis_top + layer.axis_bottom) * 0.5f, half = (layer.axis_bottom - layer.axis_top) * 0.5f;
+    float base = layer.base * scale, height = layer.height * scale;
+    float across = (y - centre) / half;
+    float join = layer.roll_join;
+    bool rolls = layer.roll_end > centre + join * half;
+    if (!rolls || across <= join) {
+        if (fabsf(across) < 1.0f) return base + height * sqrtf(1.0f - across * across);
+        return base - (fabsf(across) - 1.0f) * height * 8.0f;
+    }
+    float y0 = centre + join * half, y1 = layer.roll_end, span = y1 - y0;
+    float t = (y - y0) / span;
+    float level = layer.roll_level * scale;
+    if (t >= 1.0f) return level;
+    float start = base + height * sqrtf(1.0f - join * join);
+    float slope = -height * join / (sqrtf(1.0f - join * join) * half) * span;
+    float t3 = t * t * t, t4 = t3 * t, t5 = t4 * t;
+    float arrive = 10 * t3 - 15 * t4 + 6 * t5;
+    return start * (1.0f - arrive) + slope * (t - 6 * t3 + 8 * t4 - 3 * t5) + level * arrive;
+}
+
 void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surface) {
     if (layer.outline.size() < 3) return;
     std::vector<ImVec2> outline;
@@ -297,18 +298,15 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
     bool full_edges = layer.kind != CASE_GROOVE;
     ImRect everything(-FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX);
     bool cylinder = layer.kind == CASE_CYLINDER;
-    float band = cylinder ? 0.0f : radius;
+    float band = cylinder || layer.kind == CASE_RAISE ? 0.0f : radius;
     Field field = signed_field(outline, full_edges ? everything : edges, band + 2.0f, surface, cylinder ? &edges : nullptr);
     float height = layer.height * place.scale, base = layer.base * place.scale;
-    float axis_centre = (layer.axis_top + layer.axis_bottom) * 0.5f, axis_half = (layer.axis_bottom - layer.axis_top) * 0.5f;
-    std::vector<float> top_edge;
-    if (layer.kind == CASE_RAISE) top_edge = top_edges(field);
+    float axis_half = (layer.axis_bottom - layer.axis_top) * 0.5f;
 
     parallel_rows(field.height, [&](int from, int to) {
         for (int row = from; row < to; row++) {
             int y = field.top + row;
             Colour colour = layer_colour(layer, place, y);
-            float across = axis_half > 0 ? (place.logical_y(y) - axis_centre) / axis_half : 0.0f;
             for (int column = 0; column < field.width; column++) {
                 int x = field.left + column;
                 float distance = field.distance[(size_t)row * field.width + column];
@@ -318,8 +316,8 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
                     if (cover <= 0) continue;
                     float level;
                     if (cylinder) {
-                        float end = radius > 0 ? ease_out(field.across[(size_t)row * field.width + column] / radius) : 1.0f;
-                        level = base + height * sqrtf(std::max(0.0f, 1.0f - across * across)) * end;
+                        float end = radius > 0 ? quarter_round(field.across[(size_t)row * field.width + column] / radius) : 1.0f;
+                        level = std::max(0.0f, hinge_profile(layer, place.logical_y(y), place.scale)) * end;
                     } else {
                         level = base + height * (radius > 0 ? quarter_round(std::max(0.0f, distance) / radius) : 1.0f);
                     }
@@ -330,7 +328,7 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
                     surface.relief[index] = surface.relief[index] * (1.0f - replaced) + level * cover;
                     surface.albedo[index] = pack(blend(unpack(surface.albedo[index]), colour, cover / combined));
                     surface.alpha[index] = combined;
-                    if (cover >= 0.5f) surface.grime[index] = layer.grime;
+                    surface.grime[index] += ((layer.grime ? 1.0f : 0.0f) - surface.grime[index]) * cover;
                 } else if (layer.kind == CASE_RECESS) {
                     if (distance <= -0.5f) continue;
                     float depth = recess_profile(layer.shape, radius > 0 ? (distance + 0.5f) / radius : 1.0f) * fade_at(layer, place, x);
@@ -338,32 +336,21 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
                     if (layer.level_floor) surface.relief[index] += (base - height * depth - surface.relief[index]) * std::min(1.0f, depth * 4.0f);
                     else surface.relief[index] -= height * depth;
                     surface.albedo[index] = pack(blend(unpack(surface.albedo[index]), colour, depth * layer.tint));
-                    if (!layer.grime && depth > 0.5f) surface.grime[index] = 0;
+                    if (!layer.grime) surface.grime[index] *= 1.0f - clamp01(depth * 2.0f);
                 } else if (layer.kind == CASE_GROOVE) {
                     float t = radius > 0 ? 1.0f - fabsf(distance) / radius : 0.0f;
                     if (t <= 0) continue;
                     float spread = fabsf(distance) / radius * 3.0f;
                     float depth = expf(-0.5f * spread * spread) * fade_at(layer, place, x);
+                    if (layer.taper > 0) depth *= smoothstep((edges.Max.y - y - 0.5f) / (layer.taper * place.scale));
                     surface.relief[index] -= height * depth;
                     Colour under = unpack(surface.albedo[index]);
                     surface.albedo[index] = pack(blend(under, Colour{ 0, 0, 0 }, depth * layer.tint));
                 } else if (layer.kind == CASE_RAISE) {
-                    float top = top_edge[column];
-                    if (surface.alpha[index] <= 0 || axis_half <= 0 || top == FLT_MAX) continue;
-                    float below = y + 0.5f - top;
-                    if (below < -radius) continue;
-                    float edge_across = (place.logical_y(y) - below / place.scale - axis_centre) / axis_half;
-                    if (fabsf(edge_across) >= 1.0f) continue;
-                    float meeting = base + height * sqrtf(1.0f - edge_across * edge_across) * (1.0f - smoothstep((fabsf(edge_across) - 0.8f) / 0.2f));
-                    float current = surface.relief[index];
-                    float blend_width = std::max(0.001f, layer.blend * place.scale);
-                    float inside = std::max(0.0f, below), outside = std::max(0.0f, -below);
-                    float reach = radius > 0 ? clamp01(inside / radius) : 1.0f;
-                    float keybed = below >= 0 ? current + std::max(0.0f, meeting - current) * (1.0f - smoothstep(reach))
-                                              : meeting - outside * outside / blend_width * 4.0f;
-                    float barrel = fabsf(across) < 1.0f ? base + height * sqrtf(1.0f - across * across) - inside * inside / blend_width * 4.0f : -FLT_MAX;
-                    float overlap = std::max(0.0f, blend_width - fabsf(barrel - keybed)) / blend_width;
-                    surface.relief[index] = std::max(barrel, keybed) + overlap * overlap * blend_width * 0.25f;
+                    if (distance <= -1.5f || surface.alpha[index] <= 0 || axis_half <= 0) continue;
+                    float logical_y = place.logical_y(y);
+                    if (logical_y >= layer.roll_end) continue;
+                    surface.relief[index] = std::max(surface.relief[index], hinge_profile(layer, logical_y, place.scale));
                 }
             }
         }
@@ -535,7 +522,7 @@ void case_raster(const CaseScene &scene, std::vector<uint32_t> &pixels) {
     surface.relief.assign(count, 0.0f);
     surface.albedo.assign(count, 0);
     surface.alpha.assign(count, 0.0f);
-    surface.grime.assign(count, 0);
+    surface.grime.assign(count, 0.0f);
     pixels.assign(count, 0);
     if (count == 0) return;
     Placement place{ scene.origin, scene.scale };
@@ -596,18 +583,22 @@ void case_raster(const CaseScene &scene, std::vector<uint32_t> &pixels) {
                     float light = (AMBIENT + DIFFUSE * diffuse) / flat_light;
                     float highlight = std::max(0.0f, powf(std::max(0.0f, nx * hx + ny * hy + nz * hz), SHININESS) - flat_highlight) * SPECULAR * 255.0f;
                     Colour base = unpack(surface.albedo[index]);
-                    if (surface.grime[index]) {
-                        base = grimed(base, x, y, smudge, scene.wear);
+                    float grime = surface.grime[index];
+                    if (grime > 0) {
+                        Colour dirty = grimed(base, x, y, smudge, scene.wear);
                         if (scratched) {
                             float wear_u = (place.logical_x(x) - scene.wear_area.Min.x) / wear_width;
                             float wear_v = (place.logical_y(y) - scene.wear_area.Min.y) / wear_width;
                             float scratch = scratch_at(scene, wear_u * 0.55f, wear_v * 0.55f * scene.scratch_width / scene.scratch_height);
-                            base = blend(base, scratch_colour, scratch * scratch_alpha);
+                            dirty = blend(dirty, scratch_colour, scratch * scratch_alpha);
                         }
+                        base = blend(base, dirty, grime);
                     }
                     colour = Colour{ base.r * light + highlight, base.g * light + highlight, base.b * light + highlight };
                 }
-                Colour out{ colour.r * alpha + below.r * (1.0f - alpha), colour.g * alpha + below.g * (1.0f - alpha), colour.b * alpha + below.b * (1.0f - alpha) };
+                float dither = unit_noise(x, y, 9) - 0.5f;
+                Colour out{ colour.r * alpha + below.r * (1.0f - alpha) + dither, colour.g * alpha + below.g * (1.0f - alpha) + dither,
+                            colour.b * alpha + below.b * (1.0f - alpha) + dither };
                 float out_alpha = alpha + below_alpha * (1.0f - alpha);
                 pixels[index] = pack(out) | (ImU32)(clamp01(out_alpha) * 255.0f + 0.5f) << IM_COL32_A_SHIFT;
             }

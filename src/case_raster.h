@@ -21,11 +21,14 @@ struct CaseLayer {
     float base = 0;
     float height = 0;
     float radius = 0;
-    float blend = 0;
+    float roll_join = 0;
+    float roll_end = 0;
+    float roll_level = 0;
     float axis_top = 0;
     float axis_bottom = 0;
     CaseRecessShape shape = CASE_BOWL;
     float tint = 0;
+    float taper = 0;
     bool level_floor = false;
     float fade_from = 0;
     float fade_to = 0;
