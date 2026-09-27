@@ -1684,8 +1684,15 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     Shape body = state.show_keys ? lid_body(layout) : Shape();
     if (state.focused && !state.borderless) {
         if (state.show_keys) {
-            Shape ring = outset(body, 3.0f);
-            draw->AddPolyline(ring.data(), (int)ring.size(), IM_COL32(90, 200, 180, 160), ImDrawFlags_Closed, 2.0f);
+            ImRect whole = bounds(body);
+            float radius = LID_BODY_RADIUS * u;
+            if (layout.has_keyboard) {
+                KeyboardFrame frame = keyboard_frame(layout);
+                ImRect keyboard = bounds(keyboard_body(layout));
+                keyboard.Max.y += KB_FRONT_DEPTH * frame.kbu;
+                whole.Add(keyboard);
+            }
+            draw->AddRect(whole.Min - ImVec2(3, 3), whole.Max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), radius + 3, 0, 2.0f);
         } else {
             draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
         }
@@ -1708,7 +1715,13 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     if (state.show_keys) {
         draw->AddPolyline(body.data(), (int)body.size(), BEZEL_EDGE, ImDrawFlags_Closed, 2.0f);
         Shape inner = inset(body, 2.0f);
-        draw->AddPolyline(inner.data(), (int)inner.size(), BEZEL_LIGHT, ImDrawFlags_Closed, 1.0f);
+        ImRect box = bounds(inner);
+        float band = LID_BODY_RADIUS * u;
+        for (size_t i = 0; i < inner.size(); i++) {
+            ImVec2 a = inner[i], b = inner[(i + 1) % inner.size()];
+            float t = std::min(1.0f, std::max(0.0f, ((a.y + b.y) * 0.5f - (box.Max.y - band)) / band));
+            if (t > 0) draw->AddLine(a, b, faded(BEZEL_LIGHT, t * t), 1.0f);
+        }
         if (layout.has_keyboard && !layout.compact) draw_hinge_caps(draw, layout);
     } else {
         draw->AddRect(device_min, device_max, BEZEL_EDGE, rounding, 0, 2.0f);
