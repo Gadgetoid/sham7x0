@@ -1715,6 +1715,16 @@ Shape silhouette(const std::vector<Shape> &parts, float margin) {
         left_side.push_back(ImVec2(lo, y));
         right_side.push_back(ImVec2(hi, y));
     }
+    const int reach = (int)(margin * 6);
+    Shape left_wide = left_side, right_wide = right_side;
+    for (int i = 0; i < (int)left_side.size(); i++) {
+        for (int j = std::max(0, i - reach); j <= std::min((int)left_side.size() - 1, i + reach); j++) {
+            left_wide[i].x = std::min(left_wide[i].x, left_side[j].x);
+            right_wide[i].x = std::max(right_wide[i].x, right_side[j].x);
+        }
+    }
+    left_side = left_wide;
+    right_side = right_wide;
     Shape outline = right_side;
     for (auto it = left_side.rbegin(); it != left_side.rend(); ++it) outline.push_back(*it);
     return outset(outline, margin);

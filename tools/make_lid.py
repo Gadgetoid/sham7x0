@@ -88,8 +88,9 @@ def main():
     margin_y = (grid_h - 80) // 2
     body = [unit(p) for p in named["body"]["points"]]
     half_width = GLASS_UNITS * grid_w / (80 + 2 * margin_y) / 2
-    min_x = min(p[0] for p in body)
-    max_x = max(p[0] for p in body)
+    outline = body + [unit(p) for name in ("hinge_left", "hinge_right", "keyboard_body") for p in named[name]["points"]]
+    min_x = min(p[0] for p in outline)
+    max_x = max(p[0] for p in outline)
     min_y = min(p[1] for p in body)
     max_y = max(p[1] for p in body)
     keyboard = [unit(p) for p in named["keyboard_body"]["points"]]
