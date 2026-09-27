@@ -1745,7 +1745,7 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
 }
 
 static float extra_lid_units(const DeviceState &state) {
-    return state.show_keys && state.show_keyboard ? keyboard_extra_units(state.touch) : 0.0f;
+    return state.show_keys && state.show_keyboard ? keyboard_extra_units(state.compact) : 0.0f;
 }
 
 int device_fit_cell(ImVec2 content, float framebuffer_scale, const DeviceState &state) {
@@ -1818,7 +1818,7 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
     ImVec2 image_max = image_min + image_size;
     float rounding = state.show_keys ? 34.0f * u : 18.0f;
 
-    DeviceLayout layout = { device_min, device_max, image_min, image_max, u, rounding, has_keyboard, has_keyboard && state.touch };
+    DeviceLayout layout = { device_min, device_max, image_min, image_max, u, rounding, has_keyboard, has_keyboard && state.compact };
     record_case(layout);
     ImGui::SetCursorScreenPos(image_min);
     ImGui::InvisibleButton("device", image_size);

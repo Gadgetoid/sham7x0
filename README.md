@@ -51,6 +51,8 @@ The LCD draws at whole pixel scales, so the window snaps to the nearest size tha
 
 View > Borderless (Cmd-Shift-B, `--borderless`) drops the window frame and background so only the device sits on the desktop, sized to the current layout. Drag it by the case, or by the LCD in Screen Only. The console is hidden while it's on; Show Console or Focus Console turns it off.
 
+View > Compact (`--compact`) drops the hinge and joins the lid and keyboard at a groove for a tighter layout. Touchscreen Mode always uses it.
+
 ```
 ./sham7x0 --exec=init --keys="{WAIT}...{ENTER}"
 ./headless rom/r162.da1 --seconds=10 --keys=0:99.0/1.5,2:6.6/0.3 --pbm=out.pbm

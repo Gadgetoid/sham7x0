@@ -18,6 +18,7 @@ struct DeviceState {
     bool touch = false;
     bool select = false;
     bool borderless = false;
+    bool compact = false;
 };
 
 const int DEVICE_MIN_CELL = 2;

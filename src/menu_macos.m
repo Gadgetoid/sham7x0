@@ -135,6 +135,7 @@ void menu_install(void) {
     add_item(view, MENU_LAYOUT_NEXT, @"Next Layout", @"k", NSEventModifierFlagCommand);
     [view addItem:[NSMenuItem separatorItem]];
     add_item(view, MENU_BORDERLESS, @"Borderless", @"b", NSEventModifierFlagCommand | NSEventModifierFlagShift);
+    add_item(view, MENU_COMPACT, @"Compact", @"", 0);
     add_item(view, MENU_TOUCHSCREEN, @"Touchscreen Mode", @"t", NSEventModifierFlagCommand | NSEventModifierFlagShift);
     [view addItem:[NSMenuItem separatorItem]];
     add_item(view, MENU_SHOW_CONSOLE, @"Show Console", @"j", NSEventModifierFlagCommand);

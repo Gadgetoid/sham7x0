@@ -101,6 +101,7 @@ struct Options {
     bool backlight_timeout = false;
     bool touchscreen = false;
     bool borderless = false;
+    bool compact = false;
     std::string touch_display = "TETRA";
     std::vector<int> menu_items;
 };
@@ -115,6 +116,7 @@ struct Settings {
     bool backlight_timeout;
     bool touchscreen;
     bool borderless;
+    bool compact;
     int fps;
     float response;
     int width;
@@ -122,7 +124,7 @@ struct Settings {
 
     bool operator==(const Settings &other) const {
         return firmware == other.firmware && show_console == other.show_console && layout == other.layout &&
-               dead_columns == other.dead_columns && scratches == other.scratches && wear == other.wear && backlight_timeout == other.backlight_timeout && touchscreen == other.touchscreen && borderless == other.borderless && fps == other.fps && response == other.response &&
+               dead_columns == other.dead_columns && scratches == other.scratches && wear == other.wear && backlight_timeout == other.backlight_timeout && touchscreen == other.touchscreen && borderless == other.borderless && compact == other.compact && fps == other.fps && response == other.response &&
                width == other.width && height == other.height;
     }
 };
@@ -148,6 +150,7 @@ static void load_settings(const std::string &data, Options &options) {
         else if (name == "backlight_timeout") options.backlight_timeout = atoi(value) != 0;
         else if (name == "touchscreen") options.touchscreen = atoi(value) != 0;
         else if (name == "borderless") options.borderless = atoi(value) != 0;
+        else if (name == "compact") options.compact = atoi(value) != 0;
         else if (name == "fps") options.fps = atoi(value);
         else if (name == "response") options.response = (float)atof(value);
         else if (name == "width") options.width = atoi(value);
@@ -162,8 +165,8 @@ static void save_settings(const std::string &data, const Settings &settings) {
     std::string temporary = path + ".tmp";
     FILE *file = fopen(temporary.c_str(), "w");
     if (!file) return;
-    fprintf(file, "show_console=%d\nlayout=%d\ndead_columns=%d\nscratches=%d\nwear=%d\nbacklight_timeout=%d\ntouchscreen=%d\nborderless=%d\nfps=%d\nresponse=%g\nwidth=%d\nheight=%d\n",
-            settings.show_console, settings.layout, settings.dead_columns, settings.scratches, settings.wear, settings.backlight_timeout, settings.touchscreen, settings.borderless, settings.fps,
+    fprintf(file, "show_console=%d\nlayout=%d\ndead_columns=%d\nscratches=%d\nwear=%d\nbacklight_timeout=%d\ntouchscreen=%d\nborderless=%d\ncompact=%d\nfps=%d\nresponse=%g\nwidth=%d\nheight=%d\n",
+            settings.show_console, settings.layout, settings.dead_columns, settings.scratches, settings.wear, settings.backlight_timeout, settings.touchscreen, settings.borderless, settings.compact, settings.fps,
             settings.response, settings.width, settings.height);
     if (!settings.firmware.empty()) fprintf(file, "firmware=%s\n", settings.firmware.c_str());
     fclose(file);
@@ -183,7 +186,7 @@ static int menu_item_named(const std::string &name) {
         { "reload", MENU_RELOAD }, { "interrupt", MENU_INTERRUPT }, { "initialize", MENU_INITIALIZE }, { "test-mode", MENU_TEST_MODE }, { "show-console", MENU_SHOW_CONSOLE },
         { "focus-console", MENU_FOCUS_CONSOLE }, { "backlight", MENU_BACKLIGHT }, { "dead-columns", MENU_DEAD_COLUMNS },
         { "period", MENU_FPS_FIRST + 5 }, { "sound", MENU_SOUND },
-        { "next-layout", MENU_LAYOUT_NEXT }, { "apps", MENU_APP_BROWSER }, { "scratches", MENU_SCRATCHES }, { "wear", MENU_WEAR }, { "backlight-timeout", MENU_BACKLIGHT_TIMEOUT }, { "touchscreen", MENU_TOUCHSCREEN }, { "borderless", MENU_BORDERLESS },
+        { "next-layout", MENU_LAYOUT_NEXT }, { "apps", MENU_APP_BROWSER }, { "scratches", MENU_SCRATCHES }, { "wear", MENU_WEAR }, { "backlight-timeout", MENU_BACKLIGHT_TIMEOUT }, { "touchscreen", MENU_TOUCHSCREEN }, { "borderless", MENU_BORDERLESS }, { "compact", MENU_COMPACT },
     };
     for (auto &entry : names) {
         if (name == entry.first) return entry.second;
@@ -211,12 +214,14 @@ static void usage() {
         "  --no-touchscreen    stay in a normal window\n"
         "  --borderless        show only the device, on a transparent window without a frame\n"
         "  --no-borderless     use a normal window\n"
+        "  --compact           join the lid and keyboard without the hinge\n"
+        "  --no-compact        show the hinge\n"
         "  --period            run the device at a period accurate 10 fps\n"
         "  --fps=N             device frame rate, 0 for unlimited (default 0)\n"
         "  --response=N        LCD response time scale, 0 instant, 1 normal, 4 very slow\n"
         "  --menu=ITEMS        trigger menu items after boot: reload, interrupt, initialize, test-mode, show-console,\n"
         "                      focus-console, backlight, dead-columns, sound, period, apps,\n"
-        "                      backlight-timeout, borderless,\n"
+        "                      backlight-timeout, borderless, compact,\n"
         "                      show-keys\n"
         "  --keys=SEQUENCE     type into the device after boot, {DOWN} {ENTER} {F1}, {+LEFT} holds, {-LEFT} releases\n"
         "  --exec=COMMAND      run a console command after boot, repeatable (type help in the console)\n"
@@ -262,6 +267,8 @@ static bool parse_options(int argc, char **argv, Options &options) {
         else if (arg == "--no-touchscreen") options.touchscreen = false;
         else if (arg == "--borderless") options.borderless = true;
         else if (arg == "--no-borderless") options.borderless = false;
+        else if (arg == "--compact") options.compact = true;
+        else if (arg == "--no-compact") options.compact = false;
         else if (const char *v = value("--touchscreen=")) {
             options.touchscreen = true;
             options.touch_display = v;
@@ -866,6 +873,7 @@ int main(int argc, char **argv) {
     int restore_height = options.height;
     bool borderless = options.borderless;
     bool frameless = false;
+    device.compact = options.compact;
     if (!show_console || borderless) set_console_visible(window, false, device, restore_height);
     else snap_window(window, device, true);
     if (borderless) SDL_SetWindowBordered(window, false);
@@ -994,6 +1002,11 @@ int main(int argc, char **argv) {
                     set_touchscreen(window, touch, want_touchscreen, options.touch_display, !borderless);
                     break;
                 case MENU_BORDERLESS:   set_borderless(!borderless); break;
+                case MENU_COMPACT:
+                    options.compact = !options.compact;
+                    device.compact = options.compact || touch.active;
+                    refit_window();
+                    break;
                 case MENU_LAYOUT_NEXT:
                     layout = (layout + 1) % 4;
                     apply_layout();
@@ -1007,7 +1020,7 @@ int main(int argc, char **argv) {
             static bool have_saved = false;
             int window_w = 0, window_h = 0;
             SDL_GetWindowSize(window, &window_w, &window_h);
-            Settings current = { running_firmware ? running_firmware->id : options.firmware, show_console, layout, lcd_get_dead_columns(), device.scratches, device.wear, options.backlight_timeout, want_touchscreen, borderless, fps, response,
+            Settings current = { running_firmware ? running_firmware->id : options.firmware, show_console, layout, lcd_get_dead_columns(), device.scratches, device.wear, options.backlight_timeout, want_touchscreen, borderless, options.compact, fps, response,
                                  touch.active ? touch.windowed.w : window_w,
                                  touch.active ? touch.windowed.h : show_console && !borderless ? window_h : restore_height };
             if (!have_saved) {
@@ -1038,6 +1051,7 @@ int main(int argc, char **argv) {
         menu_set_checked(MENU_BACKLIGHT_TIMEOUT, options.backlight_timeout);
         menu_set_checked(MENU_TOUCHSCREEN, touch.active);
         menu_set_checked(MENU_BORDERLESS, borderless);
+        menu_set_checked(MENU_COMPACT, options.compact);
         menu_set_serial(runtime_serial_target());
 
         script.click_x = io.DisplaySize.x * 0.5f;
@@ -1061,6 +1075,7 @@ int main(int argc, char **argv) {
             push_mouse(event.kind, event.x + touch.panel.x - window_x, event.y + touch.panel.y - window_y);
         }
         device.touch = touch.active;
+        device.compact = options.compact || touch.active;
         if ((borderless && !touch.active) != frameless) {
             frameless = !frameless;
             set_transparent(window, renderer, frameless);
