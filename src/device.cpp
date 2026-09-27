@@ -1659,7 +1659,10 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     ImVec2 device_min = layout.device_min, device_max = layout.device_max, image_min = layout.image_min, image_max = layout.image_max;
     ImVec2 device_size = device_max - device_min;
     float u = layout.u, rounding = layout.rounding;
-    if (layout.has_keyboard && !layout.compact) draw_hinge_barrel(draw, layout);
+    if (layout.has_keyboard && !layout.compact) {
+        draw_hinge_barrel(draw, layout);
+        draw_hinge_caps(draw, layout, scaled_colour(BEZEL, 0.9f));
+    }
     Shape body = state.show_keys ? lid_body(layout) : Shape();
     if (state.focused && !state.borderless) {
         draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
@@ -1684,7 +1687,6 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
         draw->AddPolyline(body.data(), (int)body.size(), BEZEL_EDGE, ImDrawFlags_Closed, 2.0f);
         Shape inner = inset(body, 2.0f);
         draw->AddPolyline(inner.data(), (int)inner.size(), BEZEL_LIGHT, ImDrawFlags_Closed, 1.0f);
-        if (layout.has_keyboard && !layout.compact) draw_hinge_caps(draw, layout, scaled_colour(BEZEL, 0.9f));
     } else {
         draw->AddRect(device_min, device_max, BEZEL_EDGE, rounding, 0, 2.0f);
         draw->AddRect(device_min + ImVec2(2, 2), device_max - ImVec2(2, 2), BEZEL_LIGHT, rounding - 2, 0, 1.0f);
