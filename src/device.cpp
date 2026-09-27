@@ -1694,6 +1694,32 @@ void record_case(const DeviceLayout &layout) {
     case_regions.push_back({ keyboard, (KB_TOP_RADIUS + 3) * keyboard_frame(layout).kbu });
 }
 
+Shape silhouette(const std::vector<Shape> &parts, float margin) {
+    ImRect box = bounds(parts[0]);
+    for (const Shape &part : parts) box.Add(bounds(part));
+    Shape left_side, right_side;
+    for (float y = box.Min.y; y <= box.Max.y; y += 1.0f) {
+        float lo = FLT_MAX, hi = -FLT_MAX;
+        float row = std::min(std::max(y, box.Min.y + 0.01f), box.Max.y - 0.01f);
+        for (const Shape &part : parts) {
+            for (size_t i = 0; i < part.size(); i++) {
+                ImVec2 a = part[i], b = part[(i + 1) % part.size()];
+                if ((a.y <= row) != (b.y <= row)) {
+                    float x = a.x + (row - a.y) * (b.x - a.x) / (b.y - a.y);
+                    lo = std::min(lo, x);
+                    hi = std::max(hi, x);
+                }
+            }
+        }
+        if (lo > hi) continue;
+        left_side.push_back(ImVec2(lo, y));
+        right_side.push_back(ImVec2(hi, y));
+    }
+    Shape outline = right_side;
+    for (auto it = left_side.rbegin(); it != left_side.rend(); ++it) outline.push_back(*it);
+    return outset(outline, margin);
+}
+
 void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_scale, const DeviceLayout &layout, const DeviceState &state,
                   const uint8_t *down) {
     ImVec2 device_min = layout.device_min, device_max = layout.device_max, image_min = layout.image_min, image_max = layout.image_max;
@@ -1705,15 +1731,22 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     Shape body = state.show_keys ? lid_body(layout) : Shape();
     if (state.focused && !state.borderless) {
         if (state.show_keys) {
-            ImRect whole = bounds(body);
-            float radius = LID_BODY_RADIUS * u;
+            std::vector<Shape> parts = { body };
             if (layout.has_keyboard) {
-                KeyboardFrame frame = keyboard_frame(layout);
-                ImRect keyboard = bounds(keyboard_body(layout));
-                keyboard.Max.y += KB_FRONT_DEPTH * frame.kbu;
-                whole.Add(keyboard);
+                Shape face = keyboard_body(layout);
+                parts.push_back(face);
+                parts.push_back(translated(face, ImVec2(0, KB_FRONT_DEPTH * keyboard_frame(layout).kbu)));
+                if (!layout.compact) {
+                    Shape left, right, middle;
+                    ImRect span;
+                    hinge_span(layout, left, right, middle, span);
+                    parts.push_back(left);
+                    parts.push_back(right);
+                    parts.push_back(middle);
+                }
             }
-            draw->AddRect(whole.Min - ImVec2(3, 3), whole.Max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), radius + 3, 0, 2.0f);
+            Shape ring = silhouette(parts, 3.0f);
+            draw->AddPolyline(ring.data(), (int)ring.size(), IM_COL32(90, 200, 180, 160), ImDrawFlags_Closed, 2.0f);
         } else {
             draw->AddRect(device_min - ImVec2(3, 3), device_max + ImVec2(3, 3), IM_COL32(90, 200, 180, 160), rounding + 4, 0, 2.0f);
         }
