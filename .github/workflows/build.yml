@@ -19,6 +19,12 @@ jobs:
         run: SDL_VIDEO_DRIVER=dummy ./sham7x0 --data=build/smoke --screenshot=build/smoke/screen.bmp --frames=5 && test -s build/smoke/screen.bmp
       - name: Test
         run: python3 tools/test.py
+      - name: Package
+        run: make dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sham7x0-macos
+          path: dist/*.zip
       - name: Build with Touchscreen Mode
         run: make -j3 TOUCHSCREEN=1
 
@@ -27,7 +33,7 @@ jobs:
     container: ubuntu:26.04
     steps:
       - name: Install dependencies
-        run: apt-get update && apt-get install -y --no-install-recommends build-essential pkg-config libsdl3-dev python3 git ca-certificates
+        run: apt-get update && apt-get install -y --no-install-recommends build-essential pkg-config libsdl3-dev python3 git ca-certificates zip
       - uses: actions/checkout@v7
         with:
           submodules: true
@@ -37,6 +43,12 @@ jobs:
         run: SDL_VIDEO_DRIVER=dummy ./sham7x0 --data=build/smoke --screenshot=build/smoke/screen.bmp --frames=5 && test -s build/smoke/screen.bmp
       - name: Test
         run: python3 tools/test.py
+      - name: Package
+        run: make dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sham7x0-linux
+          path: dist/*.zip
 
   windows:
     runs-on: windows-latest
@@ -51,6 +63,7 @@ jobs:
             make
             git
             python
+            zip
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-pkgconf
             mingw-w64-ucrt-x86_64-sdl3
@@ -65,3 +78,11 @@ jobs:
         run: SDL_VIDEO_DRIVER=dummy ./sham7x0 --data=build/smoke --screenshot=build/smoke/screen.bmp --frames=5 && test -s build/smoke/screen.bmp
       - name: Test
         run: python3 tools/test.py
+      - name: Package
+        run: make dist
+      - name: Packaged smoke test
+        run: cd dist/sham7x0-windows-* && PATH=/usr/bin SDL_VIDEO_DRIVER=dummy ./sham7x0.exe --data=smoke --screenshot=smoke/screen.bmp --frames=5 && test -s smoke/screen.bmp
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sham7x0-windows
+          path: dist/*.zip
