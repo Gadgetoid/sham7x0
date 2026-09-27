@@ -1511,8 +1511,8 @@ void add_lid_wells(CaseScene &scene, const DeviceLayout &layout) {
     Shape light_well = pill(lid.light_box.Min - ImVec2(WELL_MARGIN, WELL_MARGIN) * u, lid.light_box.Max + ImVec2(WELL_MARGIN, WELL_MARGIN) * u);
     ImRect arrows = bounds(lid.arrow_well);
     CaseLayer arrow_well = recess_layer(lid.arrow_well, CASE_BOWL, KEY_WELL_WALL * u, KEY_WELL_DEPTH * u, WELL_TOP, WELL_BOTTOM, WELL_TINT);
-    arrow_well.fade_from = arrows.Min.x;
-    arrow_well.fade_to = arrows.GetCenter().x;
+    arrow_well.ramp_from = arrows.GetCenter().x;
+    arrow_well.ramp_to = arrows.Max.x;
     scene.layers.push_back(arrow_well);
     for (const Shape *well : { &light_well, &lid.menu_well }) {
         scene.layers.push_back(recess_layer(*well, CASE_BOWL, KEY_WELL_WALL * u, KEY_WELL_DEPTH * u, WELL_TOP, WELL_BOTTOM, WELL_TINT));
