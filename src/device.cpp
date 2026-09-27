@@ -874,12 +874,9 @@ void input_lid_keys(const Frame &frame, DeviceState &state, uint8_t *down) {
     down[LID_ENTER] = pressed;
 }
 
-void paint_lid_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImVec2 device_max, const uint8_t *down) {
+void paint_lid_wells(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImVec2 device_max) {
     float u = frame.u;
-    ImVec2 press(0, 1.2f * u);
-    auto dip = [&](bool pressed) { return pressed ? press : ImVec2(0, 0); };
     LidLayout lid = lid_layout(frame);
-
     draw->PushClipRect(device_min, device_max, true);
     for (int index = 0; index < 5; index++) {
         const ImRect &box = lid.side_boxes[index];
@@ -892,6 +889,16 @@ void paint_lid_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImV
     }
     draw_recess(draw, lid.arrow_well, KEY_WELL, u);
     draw->PopClipRect();
+    draw_recess(draw, pill(lid.light_box.Min - ImVec2(WELL_MARGIN, WELL_MARGIN) * u, lid.light_box.Max + ImVec2(WELL_MARGIN, WELL_MARGIN) * u), KEY_WELL, u);
+    draw_recess(draw, lid.menu_well, KEY_WELL, u);
+    draw_recess(draw, lid.esc_well, FLAT_WELL, u);
+}
+
+void paint_lid_keys(ImDrawList *draw, const Frame &frame, const uint8_t *down) {
+    float u = frame.u;
+    ImVec2 press(0, 1.2f * u);
+    auto dip = [&](bool pressed) { return pressed ? press : ImVec2(0, 0); };
+    LidLayout lid = lid_layout(frame);
     const float side_wear[] = { 0.7f, 0.45f, 0.45f, 0.5f, 1.0f };
     for (int index = 0; index < 5; index++) finger_grime(draw, lid.side[index], side_wear[index], u);
     finger_grime(draw, lid.menu, 1.0f, u);
@@ -911,14 +918,12 @@ void paint_lid_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImV
         else icon(draw, at, 44.0f * u, ICON_BLUE, side_glyph[index]);
     }
 
-    draw_recess(draw, pill(lid.light_box.Min - ImVec2(WELL_MARGIN, WELL_MARGIN) * u, lid.light_box.Max + ImVec2(WELL_MARGIN, WELL_MARGIN) * u), KEY_WELL, u);
     draw_key(draw, lid.light, TEAL_KEY, down[LID_LIGHT], u);
     fill_lid_icon(draw, frame, LID_SHAPE_LIGHT_ICON, dip(down[LID_LIGHT]), TEAL_ICON);
 
     erase_colour = faded(BEZEL, 0.9f);
     rub_mode = false;
     centred_text(draw, lid.menu_centre - ImVec2(0, 39 * u), 15.0f * u, PRINT, "MENU");
-    draw_recess(draw, lid.menu_well, KEY_WELL, u);
     draw_key(draw, lid.menu, DARK_DOMED_KEY, down[LID_MENU], u);
 
     erase_colour = faded(BEZEL, 0.9f);
@@ -934,7 +939,6 @@ void paint_lid_keys(ImDrawList *draw, const Frame &frame, ImVec2 device_min, ImV
         fill_lid_icon(draw, frame, index == 0 ? LID_SHAPE_UP_ICON : LID_SHAPE_DOWN_ICON, dip(pressed), IM_COL32(222, 228, 234, 235));
     }
 
-    draw_recess(draw, lid.esc_well, FLAT_WELL, u);
     draw_key(draw, lid.esc, DARK_KEY, down[LID_ESC], u);
     centred_text(draw, lid.esc_centre + dip(down[LID_ESC]), 15.0f * u, LABEL, "ESC");
     draw_key(draw, lid.enter, DARK_KEY, down[LID_ENTER], u);
@@ -1501,17 +1505,20 @@ void draw_key_hole(ImDrawList *draw, const Shape &hole, float k) {
     }
 }
 
-void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face, ImRect hinge, float hinge_top, bool compact, float u, const DeviceState &state,
-                    const uint8_t *down) {
+void paint_keybed(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face, ImRect hinge, float hinge_top, bool compact, bool wear) {
     float k = frame.kbu;
-    draw_keybed(draw, frame, face, hinge, hinge_top, compact, state.wear);
+    draw_keybed(draw, frame, face, hinge, hinge_top, compact, wear);
+    for (const KeyboardKey &key : keyboard_keys) draw_key_hole(draw, outset(keyboard_key_shape(frame, key), KEY_HOLE_GAP * k), k);
+}
+
+void paint_keyboard(ImDrawList *draw, const KeyboardFrame &frame, float u, const DeviceState &state, const uint8_t *down) {
+    float k = frame.kbu;
     for (const KeyboardKey &key : keyboard_keys) {
         if (!key.ring) continue;
         Shape ring = outset(keyboard_key_shape(frame, key), 1.6f * u + 4.6f * k + 0.75f * k);
         draw->AddPolyline(ring.data(), (int)ring.size(), faded(KB_RING, 0.95f), ImDrawFlags_Closed, 1.5f * k);
     }
 
-    for (const KeyboardKey &key : keyboard_keys) draw_key_hole(draw, outset(keyboard_key_shape(frame, key), KEY_HOLE_GAP * k), k);
     for (const KeyboardKey &key : keyboard_keys) finger_grime(draw, keyboard_key_shape(frame, key), key.wear, k);
 
     for (const KeyboardKey &key : keyboard_keys) {
@@ -1693,26 +1700,127 @@ void draw_hinge_caps(ImDrawList *draw, const DeviceLayout &layout) {
 }
 
 
-struct BakeKey {
+struct CaseKey {
     ImVec2 origin, size;
     float scale;
     bool show_keys, has_keyboard, wear, focused, compact;
-    std::vector<uint8_t> down;
     std::string model;
 
-    bool operator==(const BakeKey &other) const {
+    bool operator==(const CaseKey &other) const {
         return origin.x == other.origin.x && origin.y == other.origin.y && size.x == other.size.x && size.y == other.size.y &&
                scale == other.scale && show_keys == other.show_keys && has_keyboard == other.has_keyboard && wear == other.wear &&
-               focused == other.focused && compact == other.compact && down == other.down && model == other.model;
+               focused == other.focused && compact == other.compact && model == other.model;
     }
 };
 
-SDL_Texture *bake_texture = nullptr;
-ImDrawList *bake_list = nullptr;
-BakeKey baked, pending;
-bool bake_pending = false;
-ImVec2 bake_min, bake_size;
-float bake_scale = 1.0f;
+struct OverlayKey {
+    CaseKey base;
+    std::vector<uint8_t> down;
+
+    bool operator==(const OverlayKey &other) const {
+        return base == other.base && down == other.down;
+    }
+};
+
+struct Bake {
+    SDL_Texture *texture = nullptr;
+    ImDrawList *list = nullptr;
+    bool pending = false;
+    ImVec2 min, size;
+    float scale = 1.0f;
+};
+
+Bake case_bake, overlay_bake;
+CaseKey baked_case;
+OverlayKey baked_overlay, pending_overlay;
+CaseKey pending_case;
+
+bool bake_current(const Bake &bake) {
+    return bake.texture && !bake.pending;
+}
+
+ImDrawList *begin_bake(Bake &bake, ImDrawList *window, ImVec2 origin, ImVec2 size, float scale) {
+    if (!bake.list) bake.list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
+    bake.list->_ResetForNewFrame();
+    bake.list->Flags = window->Flags;
+    bake.list->_SetPixelDensity(window->_InvFringeScale);
+    bake.min = ImVec2(floorf(origin.x * scale), floorf(origin.y * scale)) / scale;
+    bake.size = origin + size - bake.min;
+    bake.scale = scale;
+    bake.list->PushClipRect(bake.min, origin + size);
+    bake.list->PushTexture(ImGui::GetIO().Fonts->TexRef);
+    return bake.list;
+}
+
+void replay(ImDrawList *into, const ImDrawList *from) {
+    const unsigned batch = 3 * 8192;
+    for (const ImDrawCmd &command : from->CmdBuffer) {
+        if (command.ElemCount == 0 || command.UserCallback) continue;
+        into->PushClipRect(ImVec2(command.ClipRect.x, command.ClipRect.y), ImVec2(command.ClipRect.z, command.ClipRect.w), true);
+        into->PushTexture(command.TexRef);
+        for (unsigned start = 0; start < command.ElemCount; start += batch) {
+            unsigned count = std::min(batch, command.ElemCount - start);
+            into->PrimReserve((int)count, (int)count);
+            for (unsigned i = 0; i < count; i++) {
+                const ImDrawVert &vertex = from->VtxBuffer[command.VtxOffset + from->IdxBuffer[command.IdxOffset + start + i]];
+                into->PrimWriteIdx((ImDrawIdx)into->_VtxCurrentIdx);
+                into->PrimWriteVtx(vertex.pos, vertex.uv, vertex.col);
+            }
+        }
+        into->PopTexture();
+        into->PopClipRect();
+    }
+}
+
+void finish_bake(Bake &bake, ImDrawList *window) {
+    replay(window, bake.list);
+    bake.pending = true;
+}
+
+void show_bake(const Bake &bake, ImDrawList *window) {
+    window->AddImage((ImTextureID)(intptr_t)bake.texture, bake.min, bake.min + ImVec2((float)bake.texture->w, (float)bake.texture->h) / bake.scale);
+}
+
+void flush_bake(Bake &bake, SDL_Renderer *renderer) {
+    if (!bake.pending || !bake.list) return;
+    bake.pending = false;
+    int width = (int)ceilf(bake.size.x * bake.scale), height = (int)ceilf(bake.size.y * bake.scale);
+    if (width <= 0 || height <= 0) return;
+    if (!bake.texture || bake.texture->w != width || bake.texture->h != height) {
+        if (bake.texture) SDL_DestroyTexture(bake.texture);
+        bake.texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, width, height);
+        if (!bake.texture) return;
+        SDL_SetTextureScaleMode(bake.texture, SDL_SCALEMODE_NEAREST);
+        SDL_SetTextureBlendMode(bake.texture, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+    }
+    for (ImDrawVert &vertex : bake.list->VtxBuffer) vertex.pos -= bake.min;
+    for (ImDrawCmd &command : bake.list->CmdBuffer) command.ClipRect -= ImVec4(bake.min.x, bake.min.y, bake.min.x, bake.min.y);
+
+    ImDrawData data;
+    data.Valid = true;
+    data.CmdLists.push_back(bake.list);
+    data.CmdListsCount = 1;
+    data.TotalVtxCount = bake.list->VtxBuffer.Size;
+    data.TotalIdxCount = bake.list->IdxBuffer.Size;
+    data.DisplayPos = ImVec2(0, 0);
+    data.DisplaySize = bake.size;
+    data.FramebufferScale = ImVec2(bake.scale, bake.scale);
+
+    SDL_Texture *previous = SDL_GetRenderTarget(renderer);
+    SDL_SetRenderTarget(renderer, bake.texture);
+    SDL_SetRenderScale(renderer, bake.scale, bake.scale);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+    ImGui_ImplSDLRenderer3_RenderDrawData(&data, renderer);
+    SDL_SetRenderTarget(renderer, previous);
+}
+
+void destroy_bake(Bake &bake) {
+    if (bake.texture) SDL_DestroyTexture(bake.texture);
+    bake.texture = nullptr;
+    if (bake.list) IM_DELETE(bake.list);
+    bake.list = nullptr;
+}
 
 KeyboardFrame keyboard_frame(const DeviceLayout &layout) {
     Frame lid{ layout.image_min, layout.image_max, layout.u };
@@ -1766,8 +1874,21 @@ Shape silhouette(const Shape &top, const Shape &bottom, const std::vector<Shape>
     return outline;
 }
 
-void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_scale, const DeviceLayout &layout, const DeviceState &state,
-                  const uint8_t *down) {
+ImRect keyboard_hinge_span(const DeviceLayout &layout, float &hinge_top) {
+    Frame frame{ layout.image_min, layout.image_max, layout.u };
+    ImRect hinge = layout.compact ? ImRect() : bounds(lid_shape(frame, LID_SHAPE_KEYBOARD_HINGE));
+    hinge_top = hinge.Min.y;
+    if (!layout.compact) {
+        Shape left, right, middle;
+        ImRect span;
+        hinge_span(layout, left, right, middle, span);
+        hinge = ImRect(hinge.Min.x, span.Min.y, hinge.Max.x, span.Max.y);
+        hinge_top = span.Min.y;
+    }
+    return hinge;
+}
+
+void paint_case(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_scale, const DeviceLayout &layout, const DeviceState &state) {
     ImVec2 device_min = layout.device_min, device_max = layout.device_max, image_min = layout.image_min, image_max = layout.image_max;
     ImVec2 device_size = device_max - device_min;
     float u = layout.u, rounding = layout.rounding;
@@ -1867,6 +1988,21 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     }
     draw->AddRectFilled(image_min - ImVec2(2, 2), image_max + ImVec2(2, 2), IM_COL32(58, 64, 68, 255), 3.0f);
     if (state.show_keys) {
+        paint_lid_wells(draw, Frame{ image_min, image_max, u }, device_min, device_max);
+        if (layout.has_keyboard) {
+            float hinge_top;
+            ImRect hinge = keyboard_hinge_span(layout, hinge_top);
+            paint_keybed(draw, keyboard_frame(layout), keyboard_body(layout), hinge, hinge_top, layout.compact, state.wear);
+        }
+    }
+}
+
+void paint_overlay(ImDrawList *draw, const DeviceLayout &layout, const DeviceState &state, const uint8_t *down) {
+    ImVec2 device_min = layout.device_min, image_min = layout.image_min, image_max = layout.image_max;
+    float u = layout.u;
+    wear_labels = state.wear;
+    wear_grime = state.wear;
+    if (state.show_keys) {
         float brand = 24.0f * u;
         ImVec2 at = image_min + ImVec2(-4 * u, -50 * u);
         erase_colour = faded(BEZEL, 0.9f);
@@ -1874,20 +2010,8 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
         draw->AddText(text_font(), brand, at, PRINT, "SHAM");
         wear_patch(draw, at, at + text_size(text_font(), brand, "SHAM"), 1);
         draw->AddText(ImGui::GetFont(), 17.0f * u, at + ImVec2(text_size(text_font(), brand, "SHAM").x + 18 * u, 5 * u), PRINT, model_name.c_str());
-        paint_lid_keys(draw, Frame{ image_min, image_max, u }, device_min, device_max, down);
-        if (layout.has_keyboard) {
-            Frame frame{ image_min, image_max, u };
-            ImRect hinge = layout.compact ? ImRect() : bounds(lid_shape(frame, LID_SHAPE_KEYBOARD_HINGE));
-            float hinge_top = hinge.Min.y;
-            if (!layout.compact) {
-                Shape left, right, middle;
-                ImRect span;
-                hinge_span(layout, left, right, middle, span);
-                hinge = ImRect(hinge.Min.x, span.Min.y, hinge.Max.x, span.Max.y);
-                hinge_top = span.Min.y;
-            }
-            paint_keyboard(draw, keyboard_frame(layout), keyboard_body(layout), hinge, hinge_top, layout.compact, u, state, down + LID_KEY_COUNT);
-        }
+        paint_lid_keys(draw, Frame{ image_min, image_max, u }, down);
+        if (layout.has_keyboard) paint_keyboard(draw, keyboard_frame(layout), u, state, down + LID_KEY_COUNT);
     } else {
         draw->AddText(device_min + ImVec2(PLAIN_BEZEL, 8), IM_COL32(60, 66, 72, 255), ("SHAM  " + model_name).c_str());
     }
@@ -1981,24 +2105,22 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
         if (has_keyboard) input_keyboard(keyboard_frame(layout), state, down.data() + LID_KEY_COUNT);
     }
 
-    BakeKey key = { origin, ImVec2(avail_w, height), framebuffer_scale, state.show_keys, has_keyboard, state.wear, ring, layout.compact, down, model_name };
+    CaseKey case_key = { origin, ImVec2(avail_w, height), framebuffer_scale, state.show_keys, has_keyboard, state.wear, ring, layout.compact, model_name };
+    OverlayKey overlay_key = { case_key, down };
     ImDrawList *draw = ImGui::GetWindowDrawList();
-    if (bake_texture && !bake_pending && key == baked) {
-        draw->AddImage((ImTextureID)(intptr_t)bake_texture, bake_min, bake_min + ImVec2((float)bake_texture->w, (float)bake_texture->h) / bake_scale);
+    if (bake_current(case_bake) && case_key == baked_case) {
+        show_bake(case_bake, draw);
     } else {
-        paint_device(draw, renderer, framebuffer_scale, layout, state, down.data());
-        if (!bake_list) bake_list = IM_NEW(ImDrawList)(ImGui::GetDrawListSharedData());
-        bake_list->_ResetForNewFrame();
-        bake_list->Flags = draw->Flags;
-        bake_list->_SetPixelDensity(draw->_InvFringeScale);
-        bake_list->PushClipRect(ImVec2(floorf(origin.x * framebuffer_scale), floorf(origin.y * framebuffer_scale)) / framebuffer_scale, origin + ImVec2(avail_w, height));
-        bake_list->PushTexture(ImGui::GetIO().Fonts->TexRef);
-        paint_device(bake_list, renderer, framebuffer_scale, layout, state, down.data());
-        bake_min = ImVec2(floorf(origin.x * framebuffer_scale), floorf(origin.y * framebuffer_scale)) / framebuffer_scale;
-        bake_size = origin + ImVec2(avail_w, height) - bake_min;
-        bake_scale = framebuffer_scale;
-        pending = key;
-        bake_pending = true;
+        paint_case(begin_bake(case_bake, draw, origin, ImVec2(avail_w, height), framebuffer_scale), renderer, framebuffer_scale, layout, state);
+        finish_bake(case_bake, draw);
+        pending_case = case_key;
+    }
+    if (bake_current(overlay_bake) && overlay_key == baked_overlay) {
+        show_bake(overlay_bake, draw);
+    } else {
+        paint_overlay(begin_bake(overlay_bake, draw, origin, ImVec2(avail_w, height), framebuffer_scale), layout, state, down.data());
+        finish_bake(overlay_bake, draw);
+        pending_overlay = overlay_key;
     }
 
     if (lcd_texture) draw->AddImage((ImTextureID)(intptr_t)lcd_texture, image_min, image_max);
@@ -2015,38 +2137,14 @@ float device_draw(SDL_Renderer *renderer, float framebuffer_scale, float height,
 }
 
 void device_flush_bake(SDL_Renderer *renderer) {
-    if (!bake_pending || !bake_list) return;
-    bake_pending = false;
-    int width = (int)ceilf(bake_size.x * bake_scale), height = (int)ceilf(bake_size.y * bake_scale);
-    if (width <= 0 || height <= 0) return;
-    if (!bake_texture || bake_texture->w != width || bake_texture->h != height) {
-        if (bake_texture) SDL_DestroyTexture(bake_texture);
-        bake_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, width, height);
-        if (!bake_texture) return;
-        SDL_SetTextureScaleMode(bake_texture, SDL_SCALEMODE_NEAREST);
-        SDL_SetTextureBlendMode(bake_texture, SDL_BLENDMODE_BLEND_PREMULTIPLIED);
+    if (case_bake.pending) {
+        flush_bake(case_bake, renderer);
+        baked_case = pending_case;
     }
-    for (ImDrawVert &vertex : bake_list->VtxBuffer) vertex.pos -= bake_min;
-    for (ImDrawCmd &command : bake_list->CmdBuffer) command.ClipRect -= ImVec4(bake_min.x, bake_min.y, bake_min.x, bake_min.y);
-
-    ImDrawData data;
-    data.Valid = true;
-    data.CmdLists.push_back(bake_list);
-    data.CmdListsCount = 1;
-    data.TotalVtxCount = bake_list->VtxBuffer.Size;
-    data.TotalIdxCount = bake_list->IdxBuffer.Size;
-    data.DisplayPos = ImVec2(0, 0);
-    data.DisplaySize = bake_size;
-    data.FramebufferScale = ImVec2(bake_scale, bake_scale);
-
-    SDL_Texture *previous = SDL_GetRenderTarget(renderer);
-    SDL_SetRenderTarget(renderer, bake_texture);
-    SDL_SetRenderScale(renderer, bake_scale, bake_scale);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-    SDL_RenderClear(renderer);
-    ImGui_ImplSDLRenderer3_RenderDrawData(&data, renderer);
-    SDL_SetRenderTarget(renderer, previous);
-    baked = pending;
+    if (overlay_bake.pending) {
+        flush_bake(overlay_bake, renderer);
+        baked_overlay = pending_overlay;
+    }
 }
 
 bool device_draggable(float x, float y) {
@@ -2084,8 +2182,6 @@ void device_shutdown(void) {
     grime_texture = nullptr;
     if (scratch_texture) SDL_DestroyTexture(scratch_texture);
     scratch_texture = nullptr;
-    if (bake_texture) SDL_DestroyTexture(bake_texture);
-    bake_texture = nullptr;
-    if (bake_list) IM_DELETE(bake_list);
-    bake_list = nullptr;
+    destroy_bake(case_bake);
+    destroy_bake(overlay_bake);
 }
