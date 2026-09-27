@@ -2,7 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 #include "lcd.h"
 #include "machine.h"
@@ -12,8 +16,16 @@
 
 static double wall_seconds(void) {
     struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
+    timespec_get(&now, TIME_UTC);
     return (double)now.tv_sec + (double)now.tv_nsec / 1e9;
+}
+
+static void sleep_seconds(double seconds) {
+#ifdef _WIN32
+    Sleep((DWORD)(seconds * 1000));
+#else
+    usleep((useconds_t)(seconds * 1e6));
+#endif
 }
 
 typedef struct {
@@ -239,7 +251,7 @@ int main(int argc, char **argv) {
         bool linking = link_index < link_count;
         if (serial) {
             double ahead = now - (wall_seconds() - started);
-            if (ahead > 0) usleep((useconds_t)(ahead * 1e6));
+            if (ahead > 0) sleep_seconds(ahead);
             if (!linking) serial_poll(bridge, machine);
         }
         if (linking) {

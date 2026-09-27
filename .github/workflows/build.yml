@@ -14,7 +14,7 @@ jobs:
       - name: Install SDL3
         run: brew install sdl3
       - name: Build
-        run: make -j3 && make headless
+        run: make -k -j3 && make headless
       - name: Build with Touchscreen Mode
         run: make -j3 TOUCHSCREEN=1
       - name: Test
@@ -30,7 +30,7 @@ jobs:
         with:
           submodules: true
       - name: Build
-        run: make -j4 && make headless
+        run: make -k -j4 && make headless
       - name: Test
         run: python3 tools/test.py
 
@@ -54,6 +54,6 @@ jobs:
         with:
           submodules: true
       - name: Build
-        run: make -j4 && make headless
+        run: make -k -j4 && make headless
       - name: Test
         run: python3 tools/test.py

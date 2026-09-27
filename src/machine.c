@@ -336,7 +336,11 @@ static int rtc_get_digits(const uint8_t *registers, int index) {
 static void rtc_load_host_time(rtc_t *rtc) {
     time_t now = time(NULL);
     struct tm local;
+#ifdef _WIN32
+    localtime_s(&local, &now);
+#else
     localtime_r(&now, &local);
+#endif
     uint8_t *clock = rtc->registers[0];
     rtc_set_digits(clock, 0, local.tm_sec);
     rtc_set_digits(clock, 2, local.tm_min);

@@ -256,9 +256,11 @@ static void usage() {
 
 static std::string absolute(const std::string &path) {
     if (path.empty() || is_absolute(path)) return path;
-    char cwd[PATH_MAX];
-    if (!getcwd(cwd, sizeof cwd)) return path;
-    return std::string(cwd) + "/" + path;
+    char *cwd = SDL_GetCurrentDirectory();
+    if (!cwd) return path;
+    std::string joined = std::string(cwd) + path;
+    SDL_free(cwd);
+    return joined;
 }
 
 static bool parse_options(int argc, char **argv, Options &options) {
