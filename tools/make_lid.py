@@ -56,7 +56,7 @@ LABELS = {
     "menu_well": "recess-menu", "arrow_well": "up-down-buttons-recess", "up": "button-up", "down": "button-down",
     "up_icon": "icon-arrow-up", "down_icon": "icon-arrow-down", "esc_well": "enter-esc-recess", "esc": "button-esc",
     "enter": "button-enter", "body": "lid-shape", "hinge_left": "lid-hinge-left", "hinge_right": "lid-hinge-right",
-    "keyboard_hinge": "keyboard-hinge", "keyboard_body": "keyboard-shape",
+    "keyboard_hinge": "hinge", "keyboard_body": "keyboard-shape",
 }
 SIDES = ("main", "tel", "cal", "memo", "prog")
 
