@@ -1,26 +1,14 @@
-#include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <termios.h>
-#include <unistd.h>
-#ifdef __APPLE__
-#include <util.h>
-#else
-#include <pty.h>
-#endif
 
 #include "serial.h"
+#include "serial_port.h"
 
 #define SERIAL_INPUT_SIZE  4096
 #define SERIAL_OUTPUT_SIZE 65536
 
 struct serial_bridge {
-    int      fd;
-    bool     device;
-    char     link[512];
+    serial_port_t *port;
     FILE    *log;
     int      log_direction;
     int      log_column;
@@ -47,7 +35,7 @@ static void flush_output(serial_bridge_t *bridge) {
     while (bridge->output_length) {
         size_t run = SERIAL_OUTPUT_SIZE - bridge->output_start;
         if (run > bridge->output_length) run = bridge->output_length;
-        ssize_t written = write(bridge->fd, bridge->output + bridge->output_start, run);
+        long written = serial_port_write(bridge->port, bridge->output + bridge->output_start, run);
         if (written <= 0) return;
         bridge->output_start = (bridge->output_start + (size_t)written) % SERIAL_OUTPUT_SIZE;
         bridge->output_length -= (size_t)written;
@@ -63,51 +51,13 @@ static void serial_output(void *context, uint8_t value) {
     flush_output(bridge);
 }
 
-static void make_raw(int fd, bool device) {
-    struct termios settings;
-    if (tcgetattr(fd, &settings) < 0) return;
-    cfmakeraw(&settings);
-    if (device) {
-        settings.c_cflag |= CLOCAL | CREAD;
-        settings.c_cflag &= ~(tcflag_t)HUPCL;
-    }
-    tcsetattr(fd, TCSANOW, &settings);
-}
-
-#ifdef __APPLE__
-static const char *const DEVICE_PREFIXES[] = { "cu." };
-
-static speed_t baud_speed(unsigned baud) {
-    return (speed_t)baud;
-}
-#else
-static const char *const DEVICE_PREFIXES[] = { "ttyUSB", "ttyACM" };
-
-static speed_t baud_speed(unsigned baud) {
-    static const struct { unsigned baud; speed_t speed; } speeds[] = {
-        { 1200, B1200 }, { 2400, B2400 }, { 4800, B4800 }, { 9600, B9600 }, { 19200, B19200 },
-        { 38400, B38400 }, { 57600, B57600 }, { 115200, B115200 }, { 230400, B230400 },
-    };
-    for (size_t i = 0; i < sizeof speeds / sizeof speeds[0]; i++) {
-        if (speeds[i].baud == baud) return speeds[i].speed;
-    }
-    return 0;
-}
-#endif
-
 static void set_baud(serial_bridge_t *bridge, unsigned baud) {
     bridge->baud = baud;
-    if (!bridge->device) return;
-    speed_t speed = baud_speed(baud);
-    struct termios settings;
-    if (!speed || tcgetattr(bridge->fd, &settings) < 0) return;
-    cfsetspeed(&settings, speed);
-    tcsetattr(bridge->fd, TCSANOW, &settings);
+    serial_port_set_baud(bridge->port, baud);
 }
 
 bool serial_is_device(const char *path) {
-    struct stat info;
-    return path && stat(path, &info) == 0 && S_ISCHR(info.st_mode);
+    return serial_port_is_device(path);
 }
 
 serial_bridge_t *serial_open(const char *target, char *description, size_t description_size) {
@@ -115,36 +65,19 @@ serial_bridge_t *serial_open(const char *target, char *description, size_t descr
     if (!bridge) return NULL;
     bridge->log_direction = -1;
     if (serial_is_device(target)) {
-        bridge->device = true;
-        bridge->fd = open(target, O_RDWR | O_NOCTTY | O_NONBLOCK);
-        if (bridge->fd < 0) {
-            snprintf(description, description_size, "cannot open %s: %s", target, strerror(errno));
+        bridge->port = serial_port_open_device(target, description, description_size);
+        if (!bridge->port) {
             free(bridge);
             return NULL;
         }
-        make_raw(bridge->fd, true);
         snprintf(description, description_size, "serial on %s", target);
         return bridge;
     }
-    int slave = -1;
     char name[128];
-    if (openpty(&bridge->fd, &slave, name, NULL, NULL) < 0) {
-        snprintf(description, description_size, "cannot open a pty: %s", strerror(errno));
+    bridge->port = serial_port_open_virtual(target, name, sizeof name, description, description_size);
+    if (!bridge->port) {
         free(bridge);
         return NULL;
-    }
-    make_raw(slave, false);
-    fcntl(bridge->fd, F_SETFL, fcntl(bridge->fd, F_GETFL) | O_NONBLOCK);
-    if (target && *target) {
-        unlink(target);
-        if (symlink(name, target) < 0) {
-            snprintf(description, description_size, "cannot link %s to %s: %s", target, name, strerror(errno));
-            close(bridge->fd);
-            close(slave);
-            free(bridge);
-            return NULL;
-        }
-        snprintf(bridge->link, sizeof bridge->link, "%s", target);
     }
     snprintf(description, description_size, "serial %s%s%s", name, target && *target ? " linked at " : "", target && *target ? target : "");
     return bridge;
@@ -153,8 +86,7 @@ serial_bridge_t *serial_open(const char *target, char *description, size_t descr
 void serial_close(serial_bridge_t *bridge) {
     if (!bridge) return;
     flush_output(bridge);
-    close(bridge->fd);
-    if (bridge->link[0]) unlink(bridge->link);
+    serial_port_close(bridge->port);
     if (bridge->log) fflush(bridge->log);
     free(bridge);
 }
@@ -173,9 +105,9 @@ void serial_poll(serial_bridge_t *bridge, machine_t *machine) {
     if (baud != bridge->baud) set_baud(bridge, baud);
     flush_output(bridge);
     if (bridge->input_length < SERIAL_INPUT_SIZE) {
-        ssize_t count = read(bridge->fd, bridge->input + bridge->input_length, SERIAL_INPUT_SIZE - bridge->input_length);
+        long count = serial_port_read(bridge->port, bridge->input + bridge->input_length, SERIAL_INPUT_SIZE - bridge->input_length);
         if (count > 0) {
-            for (ssize_t i = 0; i < count; i++) log_byte(bridge, 0, bridge->input[bridge->input_length + (size_t)i]);
+            for (long i = 0; i < count; i++) log_byte(bridge, 0, bridge->input[bridge->input_length + (size_t)i]);
             bridge->input_length += (size_t)count;
         }
     }
@@ -185,24 +117,6 @@ void serial_poll(serial_bridge_t *bridge, machine_t *machine) {
     if (bridge->log) fflush(bridge->log);
 }
 
-static int compare_paths(const void *a, const void *b) {
-    return strcmp((const char *)a, (const char *)b);
-}
-
 int serial_list_devices(char paths[][64], int max_paths) {
-    DIR *directory = opendir("/dev");
-    if (!directory) return 0;
-    int count = 0;
-    struct dirent *entry;
-    while ((entry = readdir(directory)) != NULL && count < max_paths) {
-        for (size_t i = 0; i < sizeof DEVICE_PREFIXES / sizeof DEVICE_PREFIXES[0]; i++) {
-            if (strncmp(entry->d_name, DEVICE_PREFIXES[i], strlen(DEVICE_PREFIXES[i])) == 0 && strlen(entry->d_name) < 64 - 5) {
-                snprintf(paths[count++], 64, "/dev/%.*s", 64 - 6, entry->d_name);
-                break;
-            }
-        }
-    }
-    closedir(directory);
-    qsort(paths, (size_t)count, 64, compare_paths);
-    return count;
+    return serial_port_list(paths, max_paths);
 }

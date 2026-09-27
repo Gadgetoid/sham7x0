@@ -76,5 +76,5 @@ std::vector<FirmwareFile> find_firmware(const std::string &directory) {
 
 std::string state_file_name(const KnownFirmware *known, const std::string &path) {
     if (known) return std::string("state-") + known->id + ".bin";
-    return "state-" + path.substr(path.rfind('/') + 1) + ".bin";
+    return "state-" + path.substr(path.find_last_of("/\\") + 1) + ".bin";
 }

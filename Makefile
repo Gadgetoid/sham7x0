@@ -1,4 +1,8 @@
-PROG      = sham7x0
+ifeq ($(OS),Windows_NT)
+EXE       = .exe
+endif
+PROG      = sham7x0$(EXE)
+HEADLESS  = headless$(EXE)
 
 .DEFAULT_GOAL := $(PROG)
 IMGUI     = lib/imgui
@@ -13,21 +17,28 @@ CFLAGS  += $(shell pkg-config --cflags sdl3)
 LDFLAGS += $(shell pkg-config --libs sdl3)
 
 UNAME := $(shell uname -s)
-ifeq ($(UNAME),Darwin)
+ifeq ($(OS),Windows_NT)
+SRC_OBJC    =
+SRC_MENU    = src/menu_imgui.cpp
+SRC_SERIAL  = src/serial_win32.c
+SYSTEM_LIBS = -lpthread
+else ifeq ($(UNAME),Darwin)
 LDFLAGS    += -framework CoreServices -framework Cocoa
 SRC_OBJC    = src/menu_macos.m
 SRC_MENU    =
+SRC_SERIAL  = src/serial_posix.c
 SYSTEM_LIBS =
 else
 SRC_OBJC    =
 SRC_MENU    = src/menu_imgui.cpp
+SRC_SERIAL  = src/serial_posix.c
 SYSTEM_LIBS = -lutil -lm -lpthread
 endif
 LDFLAGS += $(SYSTEM_LIBS)
 
 CXXFLAGS = $(filter-out -std=c99,$(CFLAGS)) -std=c++17
 
-SRC_MACHINE = src/machine.c src/wzd.c src/serial.c src/pclink.c $(Z80)/z80.c
+SRC_MACHINE = src/machine.c src/wzd.c src/serial.c $(SRC_SERIAL) src/pclink.c $(Z80)/z80.c
 
 SRC_APP = \
 	$(SRC_MACHINE) \
@@ -84,7 +95,7 @@ $(BUILD)/%.om: %.m
 $(PROG): $(OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-headless: tools/headless.c $(SRC_MACHINE) src/lcd.c src/machine.h src/wzd.h src/serial.h src/pclink.h src/lcd.h
+$(HEADLESS): tools/headless.c $(SRC_MACHINE) src/lcd.c src/machine.h src/wzd.h src/serial.h src/serial_port.h src/pclink.h src/lcd.h
 	$(CC) -Wall -O2 -fno-common -Isrc -I$(Z80) -o $@ tools/headless.c $(SRC_MACHINE) src/lcd.c $(SYSTEM_LIBS)
 
 -include $(DEPS)
@@ -95,7 +106,12 @@ run: $(PROG)
 screenshot: $(PROG)
 	./$(PROG) --rom=$(ROM) --screenshot=$(BUILD)/screenshot.bmp
 
-test: headless
+ifneq ($(EXE),)
+headless: $(HEADLESS)
+.PHONY: headless
+endif
+
+test: $(HEADLESS)
 	python3 tools/test.py
 
 keyboard:
@@ -103,6 +119,6 @@ keyboard:
 	python3 tools/make_lid.py tools/zq770_layout.svg src/lid_layout.h
 
 clean:
-	rm -rf $(BUILD) $(PROG) headless
+	rm -rf build $(PROG) $(HEADLESS)
 
 .PHONY: run screenshot test keyboard clean

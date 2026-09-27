@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Install SDL3
+        run: brew install sdl3
+      - name: Build
+        run: make -j3 && make headless
+      - name: Build with Touchscreen Mode
+        run: make -j3 TOUCHSCREEN=1
+      - name: Test
+        run: python3 tools/test.py
+
+  linux:
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    steps:
+      - name: Install dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends build-essential pkg-config libsdl3-dev python3 git ca-certificates
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Build
+        run: make -j4 && make headless
+      - name: Test
+        run: python3 tools/test.py
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          install: >-
+            make
+            git
+            python
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-sdl3
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Build
+        run: make -j4 && make headless
+      - name: Test
+        run: python3 tools/test.py

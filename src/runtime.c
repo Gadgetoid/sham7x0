@@ -404,6 +404,7 @@ static void load_state(void) {
         fclose(existing);
         char backup[sizeof state_path + 8];
         snprintf(backup, sizeof backup, "%s.old", state_path);
+        remove(backup);
         rename(state_path, backup);
         char message[sizeof backup + 80];
         snprintf(message, sizeof message, "saved state is from an older version, kept as %s and starting fresh", backup);

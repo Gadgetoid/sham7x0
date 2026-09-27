@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cctype>
 #include <mutex>
 #include <cfloat>
 #include <cmath>
@@ -31,6 +32,7 @@
 #include "menu.h"
 #include "touch.h"
 #include "runtime.h"
+#include "serial.h"
 
 static const int IDLE_WAIT_MS = 16;
 static const int REDRAW_TAIL_MS = 500;
@@ -71,15 +73,23 @@ static std::string home_directory() {
     return home && home[0] ? home : ".";
 }
 
+static bool is_absolute(const std::string &path) {
+    if (!path.empty() && (path[0] == '/' || path[0] == '\\')) return true;
+    return path.size() > 2 && isalpha((unsigned char)path[0]) && path[1] == ':' && (path[2] == '/' || path[2] == '\\');
+}
+
 static std::string xdg_directory(const char *variable, const char *fallback) {
+#ifdef _WIN32
+    const char *windows = getenv(strcmp(variable, "XDG_CONFIG_HOME") == 0 ? "APPDATA" : "LOCALAPPDATA");
+    if (windows && is_absolute(windows)) return std::string(windows) + "/sham7x0";
+#endif
     const char *value = getenv(variable);
-    std::string base = value && value[0] == '/' ? value : home_directory() + "/" + fallback;
+    std::string base = value && is_absolute(value) ? value : home_directory() + "/" + fallback;
     return base + "/sham7x0";
 }
 
 static void make_directories(const std::string &path) {
-    for (size_t slash = path.find('/', 1); slash != std::string::npos; slash = path.find('/', slash + 1)) mkdir(path.substr(0, slash).c_str(), 0755);
-    mkdir(path.c_str(), 0755);
+    SDL_CreateDirectory(path.c_str());
 }
 
 struct Options {
@@ -180,7 +190,7 @@ static void save_settings(const std::string &data, const Settings &settings) {
             settings.response, settings.width, settings.height);
     if (!settings.firmware.empty()) fprintf(file, "firmware=%s\n", settings.firmware.c_str());
     fclose(file);
-    rename(temporary.c_str(), path.c_str());
+    SDL_RenamePath(temporary.c_str(), path.c_str());
 }
 
 static std::string data_argument(int argc, char **argv) {
@@ -245,7 +255,7 @@ static void usage() {
 }
 
 static std::string absolute(const std::string &path) {
-    if (path.empty() || path[0] == '/') return path;
+    if (path.empty() || is_absolute(path)) return path;
     char cwd[PATH_MAX];
     if (!getcwd(cwd, sizeof cwd)) return path;
     return std::string(cwd) + "/" + path;
@@ -886,7 +896,10 @@ int main(int argc, char **argv) {
     runtime_set_backlight_timeout(options.backlight_timeout);
     if (!runtime_init(&config)) return 1;
     for (auto &path : options.install) runtime_install_wzd(absolute(path).c_str());
-    if (!options.serial.empty()) runtime_set_serial(options.serial == "pty" ? "pty" : absolute(options.serial).c_str());
+    if (!options.serial.empty()) {
+        bool named = options.serial == "pty" || serial_is_device(options.serial.c_str());
+        runtime_set_serial((named ? options.serial : absolute(options.serial)).c_str());
+    }
 
     for (auto &line : options.exec) console_submit(line.c_str());
     KeyScript script;

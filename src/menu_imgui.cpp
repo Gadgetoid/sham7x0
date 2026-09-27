@@ -59,9 +59,11 @@ void draw_serial() {
     bool on_device = false;
     for (int i = 0; i < serial_device_count; i++) on_device |= strcmp(serial_current, serial_devices[i]) == 0;
     if (ImGui::MenuItem("Off", nullptr, serial_current[0] == 0)) push(MENU_SERIAL_OFF);
+#ifndef _WIN32
     std::string virtual_title = "Virtual Port (pty)";
     if (serial_current[0] && !on_device && strcmp(serial_current, "pty") != 0) virtual_title = std::string("Virtual Port at ") + serial_current;
     if (ImGui::MenuItem(virtual_title.c_str(), nullptr, serial_current[0] && !on_device)) push(MENU_SERIAL_PTY);
+#endif
     if (serial_device_count) ImGui::Separator();
     for (int i = 0; i < serial_device_count; i++) {
         const char *name = strrchr(serial_devices[i], '/');
