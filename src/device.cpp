@@ -1264,7 +1264,7 @@ ImU32 scaled_colour(ImU32 colour, float k, float sheen = 0.0f) {
 ImU32 tube_colour(float t, ImU32 base, ImU32 top_colour, ImU32 bottom_colour) {
     float angle = (t - 0.5f) * IM_PI;
     float light = cosf(angle + 0.55f);
-    float shade = 0.58f + 0.46f * std::max(0.0f, light);
+    float shade = 0.7f + 0.34f * std::max(0.0f, light);
     float sheen = 0.32f * powf(std::max(0.0f, cosf(angle + 0.7f)), 18.0f);
     ImU32 colour = scaled_colour(base, shade, sheen);
     if (t < 0.12f) colour = mix(top_colour, colour, t / 0.12f);
@@ -1346,6 +1346,48 @@ void draw_groove(ImDrawList *draw, const Shape &face, float from_x, float to_x, 
     draw->AddPolyline(light.data(), (int)light.size(), IM_COL32(246, 250, 252, 220), 0, 1.0f * k);
 }
 
+float top_edge(const Shape &shape, float x) {
+    float top = FLT_MAX;
+    for (size_t i = 0; i < shape.size(); i++) {
+        ImVec2 a = shape[i], b = shape[(i + 1) % shape.size()];
+        if ((a.x <= x) != (b.x <= x)) top = std::min(top, a.y + (x - a.x) * (b.y - a.y) / (b.x - a.x));
+    }
+    return top;
+}
+
+void arch_lip(ImDrawList *draw, const Shape &face, ImRect hinge, float k) {
+    const int columns = 96, rows = 10;
+    float depth = hinge.GetHeight() * 0.9f;
+    ImVec2 uv = draw->_Data->TexUvWhitePixel;
+    ImRect box = bounds(face);
+    float x0 = std::max(box.Min.x, hinge.Min.x), x1 = std::min(box.Max.x, hinge.Max.x);
+    auto colour = [&](float t, float edge) {
+        float lit = expf(-powf(t / 0.12f, 2.0f)) * 0.55f;
+        float shade = expf(-powf((t - 0.35f) / 0.22f, 2.0f)) * 0.22f;
+        int alpha_lit = (int)(255 * lit * edge), alpha_shade = (int)(255 * shade * edge);
+        return alpha_lit >= alpha_shade ? IM_COL32(246, 250, 252, alpha_lit) : IM_COL32(40, 48, 56, alpha_shade);
+    };
+    draw->PrimReserve(columns * rows * 6, (columns + 1) * (rows + 1));
+    ImDrawIdx base = (ImDrawIdx)draw->_VtxCurrentIdx;
+    for (int column = 0; column <= columns; column++) {
+        float x = x0 + (x1 - x0) * column / columns;
+        float top = top_edge(face, x);
+        float lift = std::max(0.0f, std::min(1.0f, (hinge.Max.y - top) / (depth * 0.4f)));
+        float edge = std::min(1.0f, std::min(x - x0, x1 - x) / (hinge.GetWidth() * 0.04f)) * lift;
+        for (int row = 0; row <= rows; row++) {
+            float t = (float)row / rows;
+            draw->PrimWriteVtx(ImVec2(x, top + 0.5f + depth * t), uv, colour(t, edge));
+        }
+    }
+    for (int column = 0; column < columns; column++) {
+        for (int row = 0; row < rows; row++) {
+            ImDrawIdx i = (ImDrawIdx)(base + column * (rows + 1) + row);
+            draw->PrimWriteIdx(i); draw->PrimWriteIdx((ImDrawIdx)(i + rows + 1)); draw->PrimWriteIdx((ImDrawIdx)(i + rows + 2));
+            draw->PrimWriteIdx(i); draw->PrimWriteIdx((ImDrawIdx)(i + rows + 2)); draw->PrimWriteIdx((ImDrawIdx)(i + 1));
+        }
+    }
+}
+
 void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face, ImRect hinge, float hinge_top, bool compact, bool wear) {
     float k = frame.kbu;
     Shape front = translated(face, ImVec2(0, KB_FRONT_DEPTH * k));
@@ -1368,7 +1410,7 @@ void draw_keybed(ImDrawList *draw, const KeyboardFrame &frame, const Shape &face
         fill_polygon(draw, face, IM_COL32_WHITE, indices);
         ImGui::ShadeVertsLinearColorGradientKeepAlpha(draw, start, draw->VtxBuffer.Size, ImVec2(0, face_box.Min.y), ImVec2(0, face_box.Max.y),
                                                       lighten(KB_KEYBED, 10), mix(KB_KEYBED, IM_COL32(152, 163, 171, 255), 0.35f));
-        if (hinge.GetWidth() > 0) tube(draw, face, indices, hinge_top, hinge.Max.y, KB_KEYBED, scaled_colour(KB_KEYBED, 0.6f), lighten(KB_KEYBED, 10), hinge.Max.y);
+        if (hinge.GetWidth() > 0) arch_lip(draw, face, hinge, k);
     }
     if (grime_texture) {
         ImRect box = face_box;
@@ -1730,7 +1772,7 @@ void paint_device(ImDrawList *draw, SDL_Renderer *renderer, float framebuffer_sc
     ImVec2 device_size = device_max - device_min;
     float u = layout.u, rounding = layout.rounding;
     Shape lid_outline = state.show_keys ? lid_body(layout) : Shape();
-    if (state.show_keys) fill(draw, translated(lid_outline, ImVec2(0, 4)), IM_COL32(0, 0, 0, 90), IM_COL32(0, 0, 0, 90));
+    if (state.show_keys) fill_polygon(draw, translated(lid_outline, ImVec2(0, 4)), IM_COL32(0, 0, 0, 90), lid_indices(LID_SHAPE_BODY));
     if (layout.has_keyboard && !layout.compact) draw_hinge_barrel(draw, layout);
     Shape body = state.show_keys ? lid_body(layout) : Shape();
     if (state.focused && !state.borderless) {
