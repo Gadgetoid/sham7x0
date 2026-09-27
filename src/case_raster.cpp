@@ -349,11 +349,7 @@ void apply_layer(const CaseLayer &layer, const Placement &place, Surface &surfac
                 } else if (layer.kind == CASE_DISH) {
                     if (distance <= 0 || surface.alpha[index] <= 0) continue;
                     float t = radius > 0 ? distance / radius : 1.0f;
-                    if (t >= 1.0f) continue;
-                    float trough = sinf(IM_PI * t);
-                    float depth = trough * trough;
-                    if (layer.taper > 0) depth *= smoothstep((edges.Max.y - y - 0.5f) / (layer.taper * place.scale));
-                    surface.relief[index] -= height * depth;
+                    surface.relief[index] -= height * smoothstep(t);
                 } else if (layer.kind == CASE_RAISE) {
                     if (distance <= -1.5f || surface.alpha[index] <= 0 || axis_half <= 0) continue;
                     float logical_y = place.logical_y(y);

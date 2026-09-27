@@ -1273,9 +1273,9 @@ const float JOINT_GROOVE_WIDTH = 1.6f;
 const float JOINT_GROOVE_DEPTH = 1.5f;
 const float LID_EDGE = 2.5f;
 const float LID_RELIEF = 1.0f;
-const float LID_DISH_WIDTH = 18.0f;
-const float LID_DISH_DEPTH = 1.2f;
-const float LID_DISH_TAPER = 40.0f;
+const float LID_DISH_WIDTH = 38.0f;
+const float LID_DISH_DEPTH = 10.0f;
+const float LID_DISH_BOTTOM = 4.0f;
 const float LID_SHEEN = 0.12f;
 const float LID_SHEEN_REACH = 0.45f;
 const float PLAIN_EDGE = 2.0f;
@@ -1460,10 +1460,9 @@ void add_lid(CaseScene &scene, const DeviceLayout &layout) {
     ImRect box = bounds(body);
     scene.layers.push_back(shell_layer(body, LID_EDGE * u, LID_RELIEF * u));
     CaseLayer dish = case_layer(CASE_DISH, body);
-    dish.edges = ImRect(-FLT_MAX, -FLT_MAX, FLT_MAX, box.Max.y - LID_DISH_WIDTH * u);
+    dish.edges = ImRect(-FLT_MAX, -FLT_MAX, FLT_MAX, box.Max.y - LID_DISH_BOTTOM * u);
     dish.radius = LID_DISH_WIDTH * u;
     dish.height = LID_DISH_DEPTH * u;
-    dish.taper = LID_DISH_TAPER * u;
     scene.layers.push_back(dish);
 }
 
