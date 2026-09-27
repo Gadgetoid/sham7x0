@@ -1293,7 +1293,13 @@ void tube(ImDrawList *draw, const Shape &shape, const std::vector<int> &indices,
     const int bands = 24;
     std::vector<int> triangles = indices.empty() ? ear_clip(shape) : indices;
     ImVec2 uv = draw->_Data->TexUvWhitePixel;
-    auto colour_at = [&](float y) { return tube_colour(std::max(0.0f, std::min(1.0f, (y - y0) / (y1 - y0))), base, top_colour, bottom_colour); };
+    float fade = until < FLT_MAX ? (y1 - y0) * 0.55f : 0.0f;
+    auto colour_at = [&](float y) {
+        ImU32 colour = tube_colour(std::max(0.0f, std::min(1.0f, (y - y0) / (y1 - y0))), base, top_colour, bottom_colour);
+        if (fade <= 0) return colour;
+        float t = std::max(0.0f, std::min(1.0f, (y - (until - fade)) / fade));
+        return faded(colour, 1.0f - t * t * (3 - 2 * t));
+    };
     for (size_t t = 0; t + 2 < triangles.size(); t += 3) {
         Shape triangle = { shape[triangles[t]], shape[triangles[t + 1]], shape[triangles[t + 2]] };
         for (int band = -1; band <= bands; band++) {
@@ -1335,7 +1341,7 @@ void draw_groove(ImDrawList *draw, const Shape &face, float from_x, float to_x, 
     std::sort(edge.begin(), edge.end(), [](ImVec2 a, ImVec2 b) { return a.x < b.x; });
     if (edge.size() < 2) return;
     Shape shadow = translated(edge, ImVec2(0, -1.2f * k));
-    draw->AddPolyline(shadow.data(), (int)shadow.size(), IM_COL32(30, 34, 40, 170), 0, 1.6f * k);
+    draw->AddPolyline(shadow.data(), (int)shadow.size(), IM_COL32(40, 46, 54, 95), 0, 1.1f * k);
     Shape light = translated(edge, ImVec2(0, 0.6f * k));
     draw->AddPolyline(light.data(), (int)light.size(), IM_COL32(246, 250, 252, 220), 0, 1.0f * k);
 }
