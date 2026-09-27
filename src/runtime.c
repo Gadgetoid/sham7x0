@@ -540,7 +540,7 @@ const char *runtime_serial_target(void) {
 }
 
 static void run_command(const char *line) {
-    char message[128];
+    char message[sizeof serial_target + 16];
     if (strcmp(line, "reset") == 0) {
         machine_reset(machine);
         console_notice("reset");
@@ -583,6 +583,11 @@ void runtime_service(void) {
 static char data_path[1024];
 
 static bool start_machine(const char *rom_path, int model, const char *state_name) {
+    char path[sizeof state_path];
+    if (snprintf(path, sizeof path, "%s/%s", data_path, state_name) >= (int)sizeof path) {
+        fprintf(stderr, "sham7x0: state path too long: %s/%s\n", data_path, state_name);
+        return false;
+    }
     size_t size = 0;
     uint8_t *image = read_file(rom_path, &size);
     if (!image) {
@@ -601,7 +606,7 @@ static bool start_machine(const char *rom_path, int model, const char *state_nam
     machine_set_backlight_timeout(machine, backlight_timeout);
     load_keycode_table();
     machine_set_log(machine, log_to_console);
-    snprintf(state_path, sizeof state_path, "%s/%s", data_path, state_name);
+    memcpy(state_path, path, sizeof state_path);
     load_state();
     sound_cursor = machine_cycles(machine);
     last_step_ms = last_save_ms = host_ticks_ms();

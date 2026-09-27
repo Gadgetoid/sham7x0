@@ -1,10 +1,10 @@
-#include <CommonCrypto/CommonDigest.h>
 #include <dirent.h>
 #include <sys/stat.h>
 
 #include <cstdio>
 
 #include "firmware.h"
+#include "sha256.h"
 
 const std::vector<KnownFirmware> &known_firmware() {
     static const std::vector<KnownFirmware> table = {
@@ -19,14 +19,14 @@ const std::vector<KnownFirmware> &known_firmware() {
 std::string file_sha256(const std::string &path) {
     FILE *file = fopen(path.c_str(), "rb");
     if (!file) return "";
-    CC_SHA256_CTX context;
-    CC_SHA256_Init(&context);
+    sha256_t context;
+    sha256_init(&context);
     unsigned char buffer[65536];
     size_t count;
-    while ((count = fread(buffer, 1, sizeof buffer, file)) > 0) CC_SHA256_Update(&context, buffer, (CC_LONG)count);
+    while ((count = fread(buffer, 1, sizeof buffer, file)) > 0) sha256_update(&context, buffer, count);
     fclose(file);
-    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
-    CC_SHA256_Final(digest, &context);
+    uint8_t digest[SHA256_DIGEST_SIZE];
+    sha256_final(&context, digest);
     static const char hex[] = "0123456789abcdef";
     std::string text;
     for (unsigned char value : digest) {

@@ -6,7 +6,11 @@
 #include <sys/stat.h>
 #include <termios.h>
 #include <unistd.h>
+#ifdef __APPLE__
 #include <util.h>
+#else
+#include <pty.h>
+#endif
 
 #include "serial.h"
 
@@ -70,12 +74,34 @@ static void make_raw(int fd, bool device) {
     tcsetattr(fd, TCSANOW, &settings);
 }
 
+#ifdef __APPLE__
+static const char *const DEVICE_PREFIXES[] = { "cu." };
+
+static speed_t baud_speed(unsigned baud) {
+    return (speed_t)baud;
+}
+#else
+static const char *const DEVICE_PREFIXES[] = { "ttyUSB", "ttyACM" };
+
+static speed_t baud_speed(unsigned baud) {
+    static const struct { unsigned baud; speed_t speed; } speeds[] = {
+        { 1200, B1200 }, { 2400, B2400 }, { 4800, B4800 }, { 9600, B9600 }, { 19200, B19200 },
+        { 38400, B38400 }, { 57600, B57600 }, { 115200, B115200 }, { 230400, B230400 },
+    };
+    for (size_t i = 0; i < sizeof speeds / sizeof speeds[0]; i++) {
+        if (speeds[i].baud == baud) return speeds[i].speed;
+    }
+    return 0;
+}
+#endif
+
 static void set_baud(serial_bridge_t *bridge, unsigned baud) {
     bridge->baud = baud;
     if (!bridge->device) return;
+    speed_t speed = baud_speed(baud);
     struct termios settings;
-    if (tcgetattr(bridge->fd, &settings) < 0) return;
-    cfsetspeed(&settings, (speed_t)baud);
+    if (!speed || tcgetattr(bridge->fd, &settings) < 0) return;
+    cfsetspeed(&settings, speed);
     tcsetattr(bridge->fd, TCSANOW, &settings);
 }
 
@@ -169,7 +195,12 @@ int serial_list_devices(char paths[][64], int max_paths) {
     int count = 0;
     struct dirent *entry;
     while ((entry = readdir(directory)) != NULL && count < max_paths) {
-        if (strncmp(entry->d_name, "cu.", 3) == 0) snprintf(paths[count++], 64, "/dev/%s", entry->d_name);
+        for (size_t i = 0; i < sizeof DEVICE_PREFIXES / sizeof DEVICE_PREFIXES[0]; i++) {
+            if (strncmp(entry->d_name, DEVICE_PREFIXES[i], strlen(DEVICE_PREFIXES[i])) == 0 && strlen(entry->d_name) < 64 - 5) {
+                snprintf(paths[count++], 64, "/dev/%.*s", 64 - 6, entry->d_name);
+                break;
+            }
+        }
     }
     closedir(directory);
     qsort(paths, (size_t)count, 64, compare_paths);

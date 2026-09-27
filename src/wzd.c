@@ -47,7 +47,7 @@ bool wzd_parse(const uint8_t *data, size_t length, wzd_program_t *program, char 
         snprintf(error, error_size, "%s .wzd files are not programs", program->data_type[0] ? program->data_type : "untyped");
         return false;
     }
-    snprintf(program->file_name, sizeof program->file_name, "%s", data_line + 6);
+    snprintf(program->file_name, sizeof program->file_name, "%.*s", (int)sizeof program->file_name - 1, data_line + 6);
     bin += strlen("<BIN>\r\n");
     size_t bin_length = (size_t)(data + length - bin);
     if (bin_length < 2 || (size_t)bin[0] + 1 >= bin_length) {

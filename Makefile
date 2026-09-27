@@ -10,7 +10,20 @@ CFLAGS  += -I. -Isrc -Ilib -I$(Z80) -I$(IMGUI) -I$(IMGUI)/backends
 CFLAGS  += -Wall -O2 -fno-common -MMD -MP
 CFLAGS  += $(shell pkg-config --cflags sdl3)
 
-LDFLAGS += $(shell pkg-config --libs sdl3) -framework CoreServices -framework Cocoa
+LDFLAGS += $(shell pkg-config --libs sdl3)
+
+UNAME := $(shell uname -s)
+ifeq ($(UNAME),Darwin)
+LDFLAGS    += -framework CoreServices -framework Cocoa
+SRC_OBJC    = src/menu_macos.m
+SRC_MENU    =
+SYSTEM_LIBS =
+else
+SRC_OBJC    =
+SRC_MENU    = src/menu_imgui.cpp
+SYSTEM_LIBS = -lutil -lm -lpthread
+endif
+LDFLAGS += $(SYSTEM_LIBS)
 
 CXXFLAGS = $(filter-out -std=c99,$(CFLAGS)) -std=c++17
 
@@ -21,10 +34,14 @@ SRC_APP = \
 	src/runtime.c \
 	src/keys.c \
 	src/lcd.c \
-	src/beeper.c
+	src/beeper.c \
+	src/sha256.c
 
 TOUCHSCREEN ?= 0
 ifeq ($(TOUCHSCREEN),1)
+ifneq ($(UNAME),Darwin)
+$(error TOUCHSCREEN=1 is macOS only)
+endif
 BUILD   := $(BUILD)/touchscreen
 CFLAGS  += -DSHAM_TOUCHSCREEN
 LDFLAGS += -framework IOKit
@@ -34,15 +51,14 @@ endif
 CONFIG = build/config
 $(shell mkdir -p build; echo "TOUCHSCREEN=$(TOUCHSCREEN)" | cmp -s - $(CONFIG) || { echo "TOUCHSCREEN=$(TOUCHSCREEN)" > $(CONFIG); rm -f $(PROG); })
 
-SRC_OBJC = src/menu_macos.m
-
 SRC_APP_CXX = \
 	src/main.cpp \
 	src/device.cpp \
 	src/case_raster.cpp \
 	src/browser.cpp \
 	src/firmware.cpp \
-	src/console.cpp
+	src/console.cpp \
+	$(SRC_MENU)
 
 SRC_IMGUI = $(addprefix $(IMGUI)/, \
 	imgui.cpp imgui_draw.cpp imgui_tables.cpp imgui_widgets.cpp \
@@ -69,7 +85,7 @@ $(PROG): $(OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 headless: tools/headless.c $(SRC_MACHINE) src/lcd.c src/machine.h src/wzd.h src/serial.h src/pclink.h src/lcd.h
-	$(CC) -Wall -O2 -fno-common -Isrc -I$(Z80) -o $@ tools/headless.c $(SRC_MACHINE) src/lcd.c
+	$(CC) -Wall -O2 -fno-common -Isrc -I$(Z80) -o $@ tools/headless.c $(SRC_MACHINE) src/lcd.c $(SYSTEM_LIBS)
 
 -include $(DEPS)
 

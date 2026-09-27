@@ -1,7 +1,7 @@
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
 
-#include "menu.h"
+#include "menu_layout.h"
 #include "serial.h"
 #include "touch.h"
 
@@ -115,55 +115,45 @@ static NSMenu *submenu(NSMenu *parent, NSString *title) {
     return menu;
 }
 
+static NSEventModifierFlags cocoa_modifiers(int modifiers) {
+    NSEventModifierFlags flags = 0;
+    if (modifiers & MENU_KEY_PRIMARY) flags |= NSEventModifierFlagCommand;
+    if (modifiers & MENU_KEY_SHIFT) flags |= NSEventModifierFlagShift;
+    if (modifiers & MENU_KEY_CONTROL) flags |= NSEventModifierFlagControl;
+    return flags;
+}
+
 void menu_install(void) {
     target = [[PocketMenuTarget alloc] init];
-
-    NSMenu *run = add_menu(@"Run");
-    add_item(run, MENU_INTERRUPT, @"Power", @"c", NSEventModifierFlagControl);
-    [run addItem:[NSMenuItem separatorItem]];
-    add_item(run, MENU_RELOAD, @"Reset", @"r", NSEventModifierFlagCommand);
-    add_item(run, MENU_INITIALIZE, @"Initialize Memory", @"", 0);
-    add_item(run, MENU_TEST_MODE, @"Factory Test Mode", @"", 0);
-
-    NSMenu *install = add_menu(@"Install");
-    add_item(install, MENU_INSTALL_WZD, @"Install .wzd…", @"i", NSEventModifierFlagCommand);
-    add_item(install, MENU_APP_BROWSER, @"App Browser", @"i", NSEventModifierFlagCommand | NSEventModifierFlagShift);
-
-    NSMenu *view = add_menu(@"View");
-    NSString *layouts[] = { @"Screen Only", @"Screen & Frame", @"Screen & Buttons", @"Screen & Keyboard" };
-    for (int i = 0; i < MENU_LAYOUT_END - MENU_LAYOUT_FIRST; i++) add_item(view, MENU_LAYOUT_FIRST + i, layouts[i], @"", 0);
-    add_item(view, MENU_LAYOUT_NEXT, @"Next Layout", @"k", NSEventModifierFlagCommand);
-    [view addItem:[NSMenuItem separatorItem]];
-    add_item(view, MENU_BORDERLESS, @"Borderless", @"b", NSEventModifierFlagCommand | NSEventModifierFlagShift);
-    add_item(view, MENU_COMPACT, @"Compact", @"", 0);
-#ifdef SHAM_TOUCHSCREEN
-    add_item(view, MENU_TOUCHSCREEN, @"Touchscreen Mode", @"t", NSEventModifierFlagCommand | NSEventModifierFlagShift);
-#endif
-    [view addItem:[NSMenuItem separatorItem]];
-    add_item(view, MENU_SHOW_CONSOLE, @"Show Console", @"j", NSEventModifierFlagCommand);
-    add_item(view, MENU_FOCUS_CONSOLE, @"Focus Console", @"l", NSEventModifierFlagCommand);
-    [view addItem:[NSMenuItem separatorItem]];
-    NSMenu *realism = submenu(view, @"Realism");
-    add_item(realism, MENU_DEAD_COLUMNS, @"Dead Columns", @"d", NSEventModifierFlagCommand);
-    add_item(realism, MENU_SCRATCHES, @"Scratches", @"", 0);
-    add_item(realism, MENU_WEAR, @"Wear", @"", 0);
-    add_item(realism, MENU_BACKLIGHT_TIMEOUT, @"Backlight Timeout", @"", 0);
-
-    NSMenu *emulation = add_menu(@"Emulation");
-    add_item(emulation, MENU_BACKLIGHT, @"Backlight", @"b", NSEventModifierFlagCommand);
-    add_item(emulation, MENU_SOUND, @"Sound", @"", 0);
-    firmware_menu = submenu(emulation, @"Firmware");
-    NSMenu *serial = submenu(emulation, @"Serial Port");
-    serial.delegate = target;
-    rebuild_serial_menu(serial);
-    [emulation addItem:[NSMenuItem separatorItem]];
-    NSMenu *rate = submenu(emulation, @"Frame Rate");
-    NSString *rates[] = { @"Unlimited", @"60 fps", @"30 fps", @"20 fps", @"15 fps", @"10 fps" };
-    for (int i = 0; i < MENU_FPS_END - MENU_FPS_FIRST; i++) add_item(rate, MENU_FPS_FIRST + i, rates[i], @"", 0);
-    NSMenu *response = submenu(emulation, @"Response Time");
-    NSString *responses[] = { @"Instant", @"Fast", @"Normal", @"Slow", @"Very Slow" };
-    for (int i = 0; i < MENU_RESPONSE_END - MENU_RESPONSE_FIRST; i++) add_item(response, MENU_RESPONSE_FIRST + i, responses[i], @"", 0);
+    NSMenu *stack[4];
+    int depth = 0;
+    for (int i = 0; i < MENU_ENTRY_COUNT; i++) {
+        const menu_entry_t *entry = &MENU_ENTRIES[i];
+        NSString *title = entry->title ? [NSString stringWithUTF8String:entry->title] : nil;
+        NSMenu *menu = depth ? stack[depth - 1] : nil;
+        switch (entry->kind) {
+            case MENU_ENTRY_MENU: stack[depth++] = add_menu(title); break;
+            case MENU_ENTRY_SUBMENU: stack[depth++] = submenu(menu, title); break;
+            case MENU_ENTRY_END: depth--; break;
+            case MENU_ENTRY_SEPARATOR: [menu addItem:[NSMenuItem separatorItem]]; break;
+            case MENU_ENTRY_FIRMWARE: firmware_menu = submenu(menu, title); break;
+            case MENU_ENTRY_ITEM: {
+                NSString *key = entry->key ? [NSString stringWithFormat:@"%c", entry->key] : @"";
+                add_item(menu, entry->tag, title, key, cocoa_modifiers(entry->modifiers));
+                break;
+            }
+            case MENU_ENTRY_SERIAL: {
+                NSMenu *serial = submenu(menu, title);
+                serial.delegate = target;
+                rebuild_serial_menu(serial);
+                break;
+            }
+        }
+    }
     attach_menus();
+}
+
+void menu_draw(void) {
 }
 
 void menu_ensure(void) {

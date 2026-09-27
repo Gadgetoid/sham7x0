@@ -45,6 +45,7 @@ static const float MENU_RESPONSE_VALUES[] = { 0.0f, 0.5f, 1.0f, 2.0f, 4.0f };
 
 void menu_install(void);
 void menu_ensure(void);
+void menu_draw(void);
 void menu_perform(int item);
 int  menu_poll(void);
 void menu_set_checked(int item, bool checked);

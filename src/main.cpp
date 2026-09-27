@@ -41,6 +41,14 @@ static const int TOUCH_RETRY_MS = 2000;
 static const int CONSOLE_MIN_HEIGHT = 200;
 static const int TITLE_BAR_HEIGHT = 32;
 
+#ifdef __APPLE__
+static const SDL_Keymod SHORTCUT_MODIFIER = SDL_KMOD_GUI;
+static const char *const SHORTCUT_NAME = "Cmd";
+#else
+static const SDL_Keymod SHORTCUT_MODIFIER = SDL_KMOD_ALT;
+static const char *const SHORTCUT_NAME = "Alt";
+#endif
+
 static uint64_t start_ticks = 0;
 static std::mutex install_lock;
 static std::vector<std::string> pending_installs;
@@ -653,6 +661,45 @@ static std::string grouped_hash(const char *hash) {
     return text;
 }
 
+struct FontFile {
+    const char *path;
+    int number;
+};
+
+static const FontFile LABEL_FONTS[] = {
+    { "/System/Library/Fonts/Supplemental/Arial Bold.ttf", 0 },
+    { "C:/Windows/Fonts/arialbd.ttf", 0 },
+    { "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 0 },
+    { "/usr/share/fonts/opentype/urw-base35/NimbusSans-Bold.otf", 0 },
+    { "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0 },
+};
+
+static const FontFile LEGEND_FONTS[] = {
+    { "/System/Library/Fonts/HelveticaNeue.ttc", 10 },
+    { "C:/Windows/Fonts/seguisb.ttf", 0 },
+    { "/usr/share/fonts/opentype/urw-base35/NimbusSans-Bold.otf", 0 },
+    { "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 0 },
+    { "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0 },
+};
+
+static const FontFile KEY_LABEL_FONTS[] = {
+    { "/System/Library/Fonts/HelveticaNeue.ttc", 0 },
+    { "C:/Windows/Fonts/segoeui.ttf", 0 },
+    { "/usr/share/fonts/opentype/urw-base35/NimbusSans-Regular.otf", 0 },
+    { "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 0 },
+    { "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0 },
+};
+
+static ImFont *load_font(const FontFile *files, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        if (access(files[i].path, R_OK) != 0) continue;
+        ImFontConfig config;
+        config.FontNo = files[i].number;
+        return ImGui::GetIO().Fonts->AddFontFromFileTTF(files[i].path, 16.0f, &config);
+    }
+    return nullptr;
+}
+
 static bool wait_for_firmware(SDL_Window *window, SDL_Renderer *renderer, const std::string &rom_directory, std::vector<FirmwareFile> &found,
                               const std::string &screenshot, int frames) {
     uint64_t last_scan = SDL_GetTicks();
@@ -806,17 +853,9 @@ int main(int argc, char **argv) {
     io.IniFilename = nullptr;
     ImGui::StyleColorsDark();
     io.Fonts->AddFontDefault();
-    const char *label_font = "/System/Library/Fonts/Supplemental/Arial Bold.ttf";
-    if (access(label_font, R_OK) == 0) device_set_label_font(io.Fonts->AddFontFromFileTTF(label_font, 16.0f));
-    const char *keyboard_font = "/System/Library/Fonts/HelveticaNeue.ttc";
-    if (access(keyboard_font, R_OK) == 0) {
-        ImFontConfig medium;
-        medium.FontNo = 10;
-        ImFontConfig regular;
-        regular.FontNo = 0;
-        device_set_keyboard_fonts(io.Fonts->AddFontFromFileTTF(keyboard_font, 16.0f, &medium),
-                                  io.Fonts->AddFontFromFileTTF(keyboard_font, 16.0f, &regular));
-    }
+    device_set_label_font(load_font(LABEL_FONTS, sizeof LABEL_FONTS / sizeof LABEL_FONTS[0]));
+    device_set_keyboard_fonts(load_font(LEGEND_FONTS, sizeof LEGEND_FONTS / sizeof LEGEND_FONTS[0]),
+                              load_font(KEY_LABEL_FONTS, sizeof KEY_LABEL_FONTS / sizeof KEY_LABEL_FONTS[0]));
     std::string icon_font = std::string(SDL_GetBasePath() ? SDL_GetBasePath() : "") + "assets/MaterialSymbolsKeys.ttf";
     if (access(icon_font.c_str(), R_OK) == 0) device_set_icon_font(io.Fonts->AddFontFromFileTTF(icon_font.c_str(), 24.0f));
     ImGuiStyle &style = ImGui::GetStyle();
@@ -929,7 +968,7 @@ int main(int argc, char **argv) {
                 SDL_Keycode key = event.key.key;
                 SDL_Keymod mod = event.key.mod;
                 if ((mod & SDL_KMOD_CTRL) && key == SDLK_C) continue;
-                if (!device_focused || !device.powered || (mod & SDL_KMOD_GUI)) continue;
+                if (!device_focused || !device.powered || (mod & SHORTCUT_MODIFIER)) continue;
                 if (uint32_t code = held_code(key)) keys_set_held(code, true);
                 if (uint32_t code = special_key(key)) {
                     keys_push(code, modifiers(mod));
@@ -942,7 +981,7 @@ int main(int argc, char **argv) {
             }
             if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST) keys_release_all();
             if (event.type == SDL_EVENT_TEXT_INPUT && event.text.windowID == main_window_id && device_focused && device.powered) {
-                if (!(SDL_GetModState() & (SDL_KMOD_CTRL | SDL_KMOD_GUI))) push_text(event.text.text);
+                if (!(SDL_GetModState() & (SDL_KMOD_CTRL | SHORTCUT_MODIFIER))) push_text(event.text.text);
             }
         }
 
@@ -1145,7 +1184,8 @@ int main(int argc, char **argv) {
         device_draw(renderer, io.DisplayFramebufferScale.x, device_height, compose_seconds, device);
 
         if (console_visible) {
-            ImGui::TextDisabled("%s", device_focused ? "keys -> device  (Cmd-L: console)" : "keys -> console  (Esc: device)");
+            if (device_focused) ImGui::TextDisabled("keys -> device  (%s-L: console)", SHORTCUT_NAME);
+            else ImGui::TextDisabled("keys -> console  (Esc: device)");
             ImGui::SameLine();
             draw_transfer_progress(320);
             ImGui::SameLine(ImGui::GetContentRegionMax().x - 200);
@@ -1171,8 +1211,9 @@ int main(int argc, char **argv) {
                 ImGui::End();
             }
         }
+        menu_draw();
         ImGui::Render();
-        bool device_keys = !io.WantTextInput && !browser_focused();
+        bool device_keys = !io.WantTextInput && !browser_focused() && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
         if (device_focused && !device_keys) keys_release_all();
         device_focused = device_keys;
         if (device_focused && !SDL_TextInputActive(window)) SDL_StartTextInput(window);
