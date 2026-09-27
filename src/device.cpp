@@ -1608,6 +1608,14 @@ void draw_hinge_caps(ImDrawList *draw, const DeviceLayout &layout, ImU32 lid_bot
         tube(draw, shape, indices, span.Min.y, span.Max.y, BEZEL, lid_bottom, scaled_colour(BEZEL, 0.52f));
         cap_shade(draw, shape, indices, side == 0, cap);
     }
+    ImRect barrel = bounds(middle);
+    float u = layout.u;
+    for (float x : { barrel.Min.x, barrel.Max.x }) {
+        ImVec2 top(x, span.Min.y + 1.0f), bottom(x, span.Max.y - 1.0f);
+        draw->AddLine(top, bottom, IM_COL32(28, 32, 38, 200), 1.6f * u);
+        float light = x == barrel.Min.x ? -1.2f * u : 1.2f * u;
+        draw->AddLine(top + ImVec2(light, 0), bottom + ImVec2(light, 0), IM_COL32(236, 242, 246, 110), 0.8f * u);
+    }
 }
 
 
