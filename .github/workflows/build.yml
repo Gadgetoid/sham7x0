@@ -81,7 +81,7 @@ jobs:
       - name: Package
         run: make dist
       - name: Packaged smoke test
-        run: cd dist/sham7x0-windows-* && PATH=/usr/bin SDL_VIDEO_DRIVER=dummy ./sham7x0.exe --data=smoke --screenshot=smoke/screen.bmp --frames=5 && test -s smoke/screen.bmp
+        run: cd dist/sham7x0-windows-*/ && PATH=/usr/bin SDL_VIDEO_DRIVER=dummy ./sham7x0.exe --data=smoke --screenshot=smoke/screen.bmp --frames=5 && test -s smoke/screen.bmp
       - uses: actions/upload-artifact@v7
         with:
           name: sham7x0-windows
