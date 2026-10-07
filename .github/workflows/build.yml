@@ -96,3 +96,18 @@ jobs:
         with:
           name: sham7x0-windows
           path: dist/*.zip
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [macos, linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: '*.zip'
