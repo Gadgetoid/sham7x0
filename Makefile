@@ -12,9 +12,16 @@ ROM      ?= rom/r162.da1
 
 CFLAGS  += -I. -Isrc -Ilib -I$(Z80) -I$(IMGUI) -I$(IMGUI)/backends
 CFLAGS  += -Wall -O2 -fno-common -MMD -MP
-CFLAGS  += $(shell pkg-config --cflags sdl3)
+PKG_CONFIG ?= pkg-config
+ifeq ($(SDL_STATIC),1)
+SDL_PKG_CONFIG = $(PKG_CONFIG) --static
+else
+SDL_PKG_CONFIG = $(PKG_CONFIG)
+endif
 
-LDFLAGS += $(shell pkg-config --libs sdl3)
+CFLAGS  += $(shell $(SDL_PKG_CONFIG) --cflags sdl3)
+
+LDFLAGS += $(shell $(SDL_PKG_CONFIG) --libs sdl3)
 
 UNAME := $(shell uname -s)
 ifeq ($(OS),Windows_NT)
@@ -104,7 +111,7 @@ $(HEADLESS): tools/headless.c $(SRC_MACHINE) src/lcd.c src/machine.h src/wzd.h s
 -include $(DEPS)
 
 ARCH        := $(shell uname -m)
-SDL_PREFIX  := $(shell pkg-config --variable=prefix sdl3)
+SDL_PREFIX  := $(shell $(PKG_CONFIG) --variable=prefix sdl3)
 SDL_LICENCE := $(firstword $(wildcard $(SDL_PREFIX)/share/licenses/SDL3/LICENSE.txt $(SDL_PREFIX)/share/licenses/sdl3/LICENSE.txt))
 ifeq ($(OS),Windows_NT)
 DIST_OS     = windows
@@ -125,7 +132,7 @@ dist: $(PROG) $(HEADLESS)
 	cp lib/z80/LICENSE $(DIST_DIR)/licences/z80.txt
 	cp lib/imgui/LICENSE.txt $(DIST_DIR)/licences/imgui.txt
 ifeq ($(DIST_OS),macos)
-	cp $(shell pkg-config --variable=libdir sdl3)/libSDL3.0.dylib $(DIST_DIR)/
+	cp $(shell $(PKG_CONFIG) --variable=libdir sdl3)/libSDL3.0.dylib $(DIST_DIR)/
 	install_name_tool -id @executable_path/libSDL3.0.dylib $(DIST_DIR)/libSDL3.0.dylib
 	install_name_tool -change "$$(otool -L $(PROG) | awk '/libSDL3/ { print $$1 }')" @executable_path/libSDL3.0.dylib $(DIST_DIR)/$(PROG)
 	codesign --force --sign - $(DIST_DIR)/libSDL3.0.dylib $(DIST_DIR)/$(PROG)
@@ -133,7 +140,7 @@ endif
 ifeq ($(DIST_OS),windows)
 	cp $$(ldd $(PROG) $(HEADLESS) | awk '$$3 ~ /^\/(ucrt64|mingw64|clang64)\// { print $$3 }' | sort -u) $(DIST_DIR)/
 endif
-ifneq ($(DIST_OS),linux)
+ifneq ($(DIST_OS)$(SDL_STATIC),linux)
 ifneq ($(SDL_LICENCE),)
 	cp $(SDL_LICENCE) $(DIST_DIR)/licences/SDL3.txt
 endif

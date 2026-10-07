@@ -42,7 +42,14 @@ make headless   # CLI harness: run N seconds, dump the screen
 make dist       # dist/sham7x0-<os>-<arch>.zip with the binaries, assets, licences and, on macOS and Windows, SDL3
 ```
 
-The Linux package uses the system SDL3 (`libsdl3-0`). GitHub Actions builds all three packages as artifacts.
+Without `libsdl3-dev` (Debian 12, Ubuntu 24.04), build a static SDL3 first. That needs `cmake`, `curl` and the X11, Wayland and audio development packages, as listed in `.github/workflows/build.yml`:
+
+```
+sh tools/sdl3-static.sh
+PKG_CONFIG_PATH=build/sdl3/lib/pkgconfig make SDL_STATIC=1 && make headless
+```
+
+GitHub Actions builds all three packages as artifacts. The Linux package is built on Debian 12 with a static SDL3, so it runs on Debian 12, Ubuntu 24.04 or later without SDL3 installed.
 
 On macOS the menus are in the menu bar with Cmd shortcuts. On Linux and Windows, right-click the window (or press the Menu key) for the same menus, and use Alt where this README says Cmd. Settings and data live in `%APPDATA%\sham7x0` and `%LOCALAPPDATA%\sham7x0` on Windows. Serial ports are `/dev/cu.*` on macOS, `/dev/ttyUSB*` and `/dev/ttyACM*` on Linux and `COMn` on Windows. Windows has no virtual port; pair two ports with com0com instead.
 
